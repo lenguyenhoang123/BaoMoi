@@ -1,0 +1,51 @@
+/* Text truncation utilities */
+/* stylelint-disable property-no-vendor-prefix */
+/* stylelint-disable property-no-unknown */
+
+.line-clamp-1,
+.line-clamp-2,
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.line-clamp-1 {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  max-height: 1.5em;
+  line-height: 1.5;
+}
+
+.line-clamp-2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: 3em;
+  line-height: 1.5;
+}
+
+.line-clamp-3 {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  max-height: 4.5em;
+  line-height: 1.5;
+}
+
+/* Responsive text truncation */
+@media (min-width: 768px) {
+  .md\:line-clamp-1 {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
+  
+  .md\:line-clamp-2 {
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+  
+  .md\:line-clamp-3 {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+}

@@ -1,0 +1,22 @@
+{
+    "postman.settings.dotenv-detection-notification-visibility": false,
+    "css.lint.unknownAtRules": "ignore",
+    "editor.quickSuggestions": {
+        "strings": true
+    },
+    "tailwindCSS.includeLanguages": {
+        "css": "css",
+        "postcss": "css",
+        "javascript": "javascript",
+        "typescript": "typescript",
+        "html": "HTML"
+    },
+    "files.associations": {
+        "*.css": "tailwindcss"
+    },
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "css.validate": false,
+    "less.validate": false,
+    "scss.validate": false
+}

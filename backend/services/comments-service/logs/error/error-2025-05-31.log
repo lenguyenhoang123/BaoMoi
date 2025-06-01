@@ -1,0 +1,18 @@
+[2025-05-31 00:10:08] [31merror[39m: Lỗi xác thực: Bạn chưa đăng nhập. Vui lòng đăng nhập để tiếp tục.
+{
+  "statusCode": 401,
+  "status": "fail",
+  "isOperational": true,
+  "stack": "Error: Bạn chưa đăng nhập. Vui lòng đăng nhập để tiếp tục.\n    at authenticate (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\src\\middlewares\\auth.middleware.ts:43:13)\n    at Layer.handle [as handle_request] (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at trim_prefix (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:328:13)\n    at D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:286:9\n    at Function.process_params (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:346:12)\n    at next (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:280:10)\n    at Function.handle (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:175:3)\n    at router (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:47:12)\n    at Layer.handle [as handle_request] (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\layer.js:95:5)\n    at trim_prefix (D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\node_modules\\express\\lib\\router\\index.js:328:13)"
+}
+[2025-05-31 00:10:08] [31merror[39m: [ERROR] Error: Bạn chưa đăng nhập. Vui lòng đăng nhập để tiếp tục.
+    at authenticate (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\src\middlewares\auth.middleware.ts:43:13)
+    at Layer.handle [as handle_request] (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:328:13)
+    at D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:286:9
+    at Function.process_params (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:346:12)
+    at next (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:280:10)
+    at Function.handle (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:175:3)
+    at router (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:47:12)
+    at Layer.handle [as handle_request] (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\layer.js:95:5)
+    at trim_prefix (D:\HocVietDepPro\new\bao-moi-react\backend\services\comments-service\node_modules\express\lib\router\index.js:328:13)

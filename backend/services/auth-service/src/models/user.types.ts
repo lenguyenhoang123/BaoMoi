@@ -1,0 +1,39 @@
+import { Model } from 'sequelize';
+
+export type UserRole = 'user' | 'admin' | 'moderator';
+
+export interface UserAttributes {
+  id: string; // Sử dụng string cho UUID
+  email: string;
+  password: string;
+  full_name: string;
+  phone?: string | null;
+  address?: string | null;
+  avatar?: string | null;
+  role: UserRole;
+  is_active: boolean;
+  email_verified: boolean;
+  last_login?: Date | null;
+  login_attempts: number;
+  lock_until?: Date | null;
+  reset_password_token?: string | null;
+  reset_password_expires?: Date | null;
+  email_verification_token?: string | null;
+  email_verification_expires?: Date | null;
+  verified_at?: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  deleted_at?: Date | null;
+}
+
+export interface UserCreationAttributes 
+  extends Omit<UserAttributes, 'id' | 'created_at' | 'updated_at' | 'deleted_at'> {}
+
+export interface UserInstance 
+  extends Model<UserAttributes, UserCreationAttributes>,
+    UserAttributes {
+  // Instance methods can be defined here
+  createdAt?: Date;
+  updatedAt?: Date;
+  deletedAt?: Date | null;
+}

@@ -1,0 +1,47 @@
+{
+  // CSS and PostCSS
+  "css.lint.unknownAtRules": "ignore",
+  "css.validate": false,
+  "less.validate": false,
+  "scss.validate": false,
+  
+  // File associations
+  "files.associations": {
+    "*.css": "postcss",
+    "*.module.css": "postcss"
+  },
+  
+  // Editor settings
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.quickSuggestions": {
+    "strings": true,
+    "comments": true,
+    "other": true
+  },
+  
+  // Tailwind CSS
+  "tailwindCSS.emmetCompletions": true,
+  "tailwindCSS.includeLanguages": {
+    "html": "HTML",
+    "javascript": "javascript",
+    "typescript": "typescript",
+    "jsx": "javascript",
+    "tsx": "typescript",
+    "css": "postcss"
+  },
+  "tailwindCSS.validate": true,
+  
+  // PostCSS
+  "postcss.validate": false,
+  
+  // Code actions on save
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "css.styleSheets": [
+    "https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css"
+  ],
+  "editor.inlineSuggest.enabled": true,
+  "files.autoSave": "onFocusChange"
+}

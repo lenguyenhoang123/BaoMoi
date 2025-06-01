@@ -1,0 +1,214 @@
+.container {
+  padding: 24px;
+  min-height: 100vh;
+  background-color: #f0f2f5;
+  position: relative;
+  /* Đảm bảo container không cắt bớt các phần tử con */
+  overflow: visible;
+  z-index: 1;
+}
+
+/* Style cho header */
+.header {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  margin: -24px -24px 24px -24px;
+  z-index: 40;
+  position: relative;
+  /* Đảm bảo header không tạo ra ngữ cảnh xếp chồng mới */
+  isolation: isolate;
+}
+
+/* Style cho dropdown */
+.dropdownContainer {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdownMenu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 8px;
+  min-width: 200px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1050;
+  overflow: hidden;
+}
+
+/* Đảm bảo dropdown không bị cắt bởi container */
+:global(.ant-dropdown) {
+  position: absolute !important;
+  z-index: 1050 !important;
+}
+
+:global(.ant-dropdown .ant-dropdown-menu) {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  padding: 8px 0 !important;
+  margin: 0 !important;
+}
+
+/* Reset các style có thể gây xung đột */
+:global(body) {
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Đảm bảo các phần tử cha không cắt bớt dropdown */
+:global(html), 
+:global(body),
+:global(#__next) {
+  overflow: visible !important;
+}
+
+/* Style cho các item trong dropdown */
+:global(.ant-dropdown-menu-item) {
+  padding: 8px 16px !important;
+  line-height: 1.5 !important;
+  cursor: pointer !important;
+  transition: all 0.2s;
+  white-space: nowrap !important;
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+
+:global(.ant-dropdown-menu-item:hover) {
+  background-color: #f5f5f5 !important;
+}
+
+:global(.ant-dropdown-menu-item .anticon) {
+  margin-right: 8px;
+}
+
+/* Đảm bảo dropdown không bị ẩn sau các phần tử khác */
+:global(.ant-dropdown) {
+  z-index: 9999 !important;
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+:global(.ant-dropdown .ant-dropdown-menu) {
+  z-index: 10000 !important;
+  position: absolute !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 8px !important;
+  margin-top: 8px !important;
+  pointer-events: auto;
+  background: #fff;
+}
+
+.ant-dropdown-menu-item {
+  padding: 8px 16px;
+  transition: all 0.3s;
+  position: relative;
+  z-index: 2002 !important;
+}
+
+.ant-dropdown-menu-item:hover {
+  background-color: #f5f5f5;
+}
+
+/* Đảm bảo các phần tử khác không che dropdown */
+.ant-layout-header,
+.ant-layout-sider,
+.ant-layout-content,
+.ant-layout-footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* Tăng z-index cho header chứa avatar */
+.header {
+  position: relative;
+  z-index: 1000;
+}
+
+/* Đảm bảo dropdown không bị ảnh hưởng bởi overflow */
+.ant-dropdown {
+  overflow: visible !important;
+}
+
+.ant-dropdown-hidden {
+  display: none;
+}
+
+.ant-dropdown-placement-bottomLeft > .ant-dropdown-arrow,
+.ant-dropdown-placement-bottomRight > .ant-dropdown-arrow {
+  z-index: 2002 !important;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #fff;
+  padding: 16px 24px;
+  margin: -24px -24px 24px -24px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.contentWrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 120px);
+  overflow: hidden;
+}
+
+.formContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-right: -8px;
+  padding-bottom: 80px; /* Để tránh bị footer che mất nội dung */
+}
+
+/* Thanh cuộn tùy chỉnh */
+.formContainer::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.formContainer::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.formContainer::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+
+.formContainer::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  padding: 16px 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  z-index: 9;
+  box-shadow: 0 -1px 2px 0 rgba(0, 0, 0, 0.03);
+}

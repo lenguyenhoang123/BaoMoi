@@ -1,70 +1,151 @@
-# Getting Started with Create React App
+# Ứng dụng Báo Điện Tử
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Đây là dự án báo điện tử được xây dựng bằng Next.js cho frontend và kiến trúc microservices cho backend sử dụng Node.js và Express.
 
-## Available Scripts
+## 🚀 Công nghệ sử dụng
 
-In the project directory, you can run:
+### Frontend (Next.js)
+- Next.js 14 với App Router
+- TypeScript
+- TailwindCSS cho giao diện
+- React Hook Form cho xử lý form
+- React Query cho quản lý server state
+- NextAuth.js cho xác thực
+- Shadcn/ui cho component UI
 
-### `npm start`
+### Backend (Microservices)
+- **API Gateway**: Node.js với Express, xử lý định tuyến và CORS
+- **Auth Service**: Xác thực người dùng, JWT, OTP
+- **Posts Service**: Quản lý bài viết
+- **Categories Service**: Quản lý danh mục
+- **Tags Service**: Quản lý thẻ bài viết
+- **Comments Service**: Quản lý bình luận
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### Công nghệ khác
+- **Cơ sở dữ liệu**: PostgreSQL
+- **ORM**: Prisma
+- **Xác thực**: JWT, OTP qua email
+- **API**: RESTful API
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 📁 Cấu trúc dự án
 
-### `npm test`
+```
+bao-moi-react/
+├── frontend/                 # Ứng dụng Next.js
+│   ├── src/
+│   │   ├── app/             # App Router
+│   │   ├── components/       # Components dùng chung
+│   │   ├── lib/              # Utilities, helpers
+│   │   └── styles/           # Global styles
+│   └── public/               # Static files
+│
+└── backend/                 # Các dịch vụ backend
+    ├── services/
+    │   ├── api-gateway/    # API Gateway
+    │   ├── auth-service/     # Xác thực người dùng
+    │   ├── posts-service/    # Quản lý bài viết
+    │   ├── categories-service/# Quản lý danh mục
+    │   ├── tags-service/     # Quản lý thẻ
+    │   └── comments-service/ # Quản lý bình luận
+    └── .env.example         # Mẫu file cấu hình
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 🚀 Bắt đầu
 
-### `npm run build`
+### Yêu cầu hệ thống
+- Node.js 18+
+- npm 9+ hoặc pnpm 8+
+- PostgreSQL 14+
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Chạy thủ công
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+1. **Cài đặt frontend**
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+2. **Cài đặt backend**
+Mỗi service cần được cài đặt và chạy riêng:
 
-### `npm run eject`
+```bash
+# Vào thư mục service
+cd backend/services/auth-service
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+# Cài đặt dependencies
+pnpm install
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+# Chạy service
+pnpm dev
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## 🌐 Các endpoint chính
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+- **Frontend**: http://localhost:3004
+- **API Gateway**: http://localhost:3000
+- **Auth Service**: http://localhost:3005
+- **Posts Service**: http://localhost:3002
+- **Categories Service**: http://localhost:3009
+- **Tags Service**: http://localhost:3006
+- **Comments Service**: http://localhost:3008
 
-## Learn More
+## 🔒 Biến môi trường
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Mỗi service có file `.env` riêng. Sao chép từ file `.env.example` và điền các giá trị phù hợp.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## 📝 Ghi chú phát triển
 
-### Code Splitting
+- Luôn chạy `pnpm lint` trước khi commit code
+- Sử dụng Conventional Commits cho thông điệp commit
+- Tạo pull request mới cho mỗi tính năng/sửa lỗi
+```bash
+cd backend
+npm install
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+2. Tạo file `.env` từ `.env.example` và cập nhật các biến môi trường
 
-### Analyzing the Bundle Size
+3. Khởi động các service:
+```bash
+# Khởi động API Gateway
+cd services/api-gateway
+npm start
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+# Khởi động các service khác tương tự
+cd ../auth-service
+npm start
+```
 
-### Making a Progressive Web App
+Hoặc sử dụng Docker:
+```bash
+docker-compose up --build
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Các lệnh thường dùng
 
-### Advanced Configuration
+- `npm start`: Khởi động ứng dụng ở chế độ phát triển
+- `npm run build`: Build ứng dụng cho production
+- `npm test`: Chạy các test
+- `npm run lint`: Kiểm tra lỗi code
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## Hướng dẫn phát triển
 
-### Deployment
+1. Tạo nhánh mới cho tính năng mới:
+   ```bash
+   git checkout -b feature/tên-tính-năng
+   ```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+2. Commit code thường xuyên với thông điệp rõ ràng
 
-### `npm run build` fails to minify
+3. Tạo pull request khi hoàn thành tính năng
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Liên hệ
+
+Nếu có bất kỳ câu hỏi nào, vui lòng liên hệ:
+- Email: your.email@example.com
+- Điện thoại: 0123 456 789
+
+## Giấy phép
+
+Dự án được phát triển bởi [Tên tổ chức/cá nhân] và được cấp phép theo [Tên giấy phép].

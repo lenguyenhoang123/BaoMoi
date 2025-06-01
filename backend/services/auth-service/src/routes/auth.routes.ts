@@ -1,0 +1,190 @@
+import { Router, Request, Response, NextFunction } from 'express';
+import { body, query, validationResult } from 'express-validator';
+import AuthController from '../controllers/auth.controller';
+import { validateRequest } from '../middlewares/validate-request.middleware';
+import { auth } from '../middlewares/auth.middleware';
+
+const router = Router();
+
+// Xác thực email
+router.post(
+  '/verify-email',
+  [
+    body('email').isEmail().withMessage('Email không hợp lệ'),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('Mã OTP phải có đúng 6 chữ số'),
+    validateRequest
+  ],
+  AuthController.verifyEmail
+);
+
+// Gửi lại mã OTP
+router.post(
+  '/resend-otp',
+  [
+    body('email').isEmail().withMessage('Email không hợp lệ'),
+    validateRequest
+  ],
+  AuthController.resendOtp
+);
+
+// Đăng ký tài khoản
+router.post(
+  '/register',
+  [
+    // Log request
+    (req: Request, _res: Response, next: NextFunction) => {
+      console.log('\n🔵 [REGISTER] Nhận yêu cầu đăng ký mới:', {
+        url: req.originalUrl,
+        path: req.path,
+        method: req.method,
+        headers: req.headers,
+        body: req.body
+      });
+      next();
+    },
+    
+    // Validate input
+    body('email')
+      .isEmail().withMessage('Email không hợp lệ')
+      .normalizeEmail(),
+      
+    body('password')
+      .isLength({ min: 6 }).withMessage('Mật khẩu phải có ít nhất 6 ký tự'),
+      
+    body('full_name')
+      .trim()
+      .notEmpty().withMessage('Họ và tên là bắt buộc'),
+      
+    // Xử lý validation
+    (req: Request, res: Response, next: NextFunction): void => {
+      try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+          const errorMessages = errors.array().map(err => err.msg);
+          console.log('🔴 [REGISTER] Lỗi validation:', errorMessages);
+          res.status(400).json({
+            success: false,
+            message: 'Lỗi xác thực dữ liệu',
+            errors: errors.array()
+          });
+          return;
+        }
+        console.log('🟢 [REGISTER] Dữ liệu hợp lệ, chuyển đến controller');
+        next();
+        return;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : 'Lỗi không xác định';
+        console.error('🔥 [REGISTER] Lỗi trong quá trình xử lý validation:', errorMessage);
+        res.status(500).json({
+          success: false,
+          message: 'Đã xảy ra lỗi trong quá trình xác thực dữ liệu',
+          error: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        });
+        return;
+      }
+    },
+    
+    // Middleware xử lý lỗi toàn cục
+    (err: any, _req: Request, res: Response, next: NextFunction): void => {
+      if (err) {
+        console.error('🔥 [REGISTER] Lỗi trong quá trình xử lý:', err);
+        res.status(500).json({
+          success: false,
+          message: 'Đã xảy ra lỗi trong quá trình xử lý yêu cầu',
+          error: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
+        return;
+      }
+      next();
+      return;
+    }
+  ],
+  // Xử lý đăng ký
+  AuthController.register
+);
+
+// Đăng nhập
+router.post(
+  '/login',
+  [
+    body('email').isEmail().withMessage('Email không hợp lệ'),
+    body('password').notEmpty().withMessage('Mật khẩu là bắt buộc'),
+    validateRequest
+  ],
+  AuthController.login
+);
+
+// Lấy thông tin người dùng hiện tại
+router.get('/me', auth.auth, AuthController.getCurrentUser);
+
+// Đổi mật khẩu
+router.post(
+  '/change-password',
+  [
+    auth.auth,
+    body('currentPassword').notEmpty().withMessage('Mật khẩu hiện tại là bắt buộc'),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('Mật khẩu mới phải có ít nhất 6 ký tự'),
+    validateRequest
+  ],
+  AuthController.changePassword
+);
+
+// Quên mật khẩu
+router.post(
+  '/forgot-password',
+  [
+    body('email').isEmail().withMessage('Email không hợp lệ'),
+    validateRequest
+  ],
+  AuthController.forgotPassword
+);
+
+// Đặt lại mật khẩu
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty().withMessage('Token là bắt buộc'),
+    body('newPassword')
+      .isLength({ min: 6 })
+      .withMessage('Mật khẩu mới phải có ít nhất 6 ký tự'),
+    validateRequest
+  ],
+  AuthController.resetPassword
+);
+
+// Xác thực email
+router.get(
+  '/verify-email',
+  [
+    query('token').notEmpty().withMessage('Token là bắt buộc'),
+    validateRequest
+  ],
+  AuthController.verifyEmail
+);
+
+// Gửi lại email xác thực
+router.post(
+  '/resend-verification-email',
+  [
+    body('email').isEmail().withMessage('Email không hợp lệ'),
+    validateRequest
+  ],
+  AuthController.resendVerificationEmail
+);
+
+// Làm mới token
+router.post(
+  '/refresh-token',
+  [
+    body('refreshToken').notEmpty().withMessage('Refresh token là bắt buộc'),
+    validateRequest
+  ],
+  AuthController.refreshToken
+);
+
+// Đăng xuất
+router.post('/logout', auth.auth, AuthController.logout);
+
+export { router as authRoutes };

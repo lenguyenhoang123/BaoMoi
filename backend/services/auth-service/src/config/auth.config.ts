@@ -1,0 +1,56 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Đường dẫn đến file .env của auth service
+const AUTH_ENV_PATH = path.join(__dirname, '../../.env');
+
+// Tải biến môi trường từ file .env của auth service
+dotenv.config({ path: AUTH_ENV_PATH });
+
+// Kiểm tra các biến môi trường bắt buộc
+const requiredVars = ['JWT_SECRET', 'JWT_EXPIRES_IN', 'REFRESH_TOKEN_SECRET', 'REFRESH_TOKEN_EXPIRES_IN'];
+const missingVars = requiredVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error(`[AUTH CONFIG] Lỗi: Thiếu các biến môi trường bắt buộc: ${missingVars.join(', ')}`);
+  console.error(`[AUTH CONFIG] Vui lòng kiểm tra lại file .env tại: ${AUTH_ENV_PATH}`);
+  process.exit(1);
+}
+
+// Kiểm tra các biến môi trường bắt buộc cho xác thực
+const requiredAuthVars = ['JWT_SECRET', 'JWT_EXPIRES_IN', 'REFRESH_TOKEN_SECRET', 'REFRESH_TOKEN_EXPIRES_IN'];
+const missingAuthVars = requiredAuthVars.filter(varName => !process.env[varName]);
+
+if (missingAuthVars.length > 0) {
+  console.error(`[AUTH CONFIG] Lỗi: Thiếu các biến môi trường bắt buộc: ${missingAuthVars.join(', ')}`);
+  console.error(`[AUTH CONFIG] Vui lòng kiểm tra lại file .env tại: ${AUTH_ENV_PATH}`);
+  process.exit(1);
+}
+
+export const authConfig = {
+  jwt: {
+    secret: process.env.JWT_SECRET!,
+    expiresIn: process.env.JWT_EXPIRES_IN!,
+    refreshExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN!,
+  },
+  bcrypt: {
+    saltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10),
+  },
+  email: {
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    user: process.env.EMAIL_USER || '',
+    pass: process.env.EMAIL_PASS || '',
+    from: process.env.EMAIL_FROM || 'no-reply@baomoi.com',
+  },
+  frontend: {
+    baseUrl: process.env.FRONTEND_URL || 'http://localhost:3004',
+    resetPasswordPath: '/reset-password',
+    verifyEmailPath: '/verify-email',
+  },
+  security: {
+    maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10),
+    lockoutTime: parseInt(process.env.LOCKOUT_TIME || '15', 10) * 60 * 1000, // 15 minutes
+  },
+};
+
+export default authConfig;

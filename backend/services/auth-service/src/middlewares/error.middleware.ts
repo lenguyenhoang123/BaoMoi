@@ -1,0 +1,100 @@
+import { ErrorRequestHandler } from 'express';
+import { logger } from '../utils/logger';
+
+/**
+ * Middleware xử lý lỗi toàn cục cho ứng dụng
+ * 
+ * Middleware này sẽ bắt tất cả các lỗi được ném ra từ các route khác
+ * và trả về phản hồi JSON phù hợp với từng loại lỗi
+ */
+
+/**
+ * Middleware xử lý lỗi toàn cục
+ */
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  // _next: Tham số next được đánh dấu _ để chỉ ra rằng nó không được sử dụng trong middleware này
+  // vì đây là middleware xử lý lỗi cuối cùng trong chuỗi middleware
+  // Ghi log lỗi với đầy đủ thông tin để debug
+  // Bao gồm: thông điệp lỗi, stack trace (trong môi trường phát triển),
+  // thông tin về request và người dùng (nếu có)
+  logger.error('Error:', {
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : {},
+    path: req.path,
+    method: req.method,
+    body: req.body,
+    query: req.query,
+    params: req.params,
+    user: (req as any).user ? (req as any).user.id : 'unauthenticated'
+  });
+
+  // Định nghĩa cấu trúc phản hồi lỗi mặc định
+  // success: luôn là false khi có lỗi
+  // message: thông điệnh lỗi
+  // errors: chi tiết các lỗi (nếu có)
+  // code: mã lỗi tùy chỉnh (nếu có)
+  // stack: thông tin stack trace (chỉ trong môi trường phát triển)
+  const errorResponse: {
+    success: boolean;
+    message: string;
+    errors?: Array<{ field?: string; message: string }>;
+    code?: string;
+    stack?: string;
+  } = {
+    success: false,
+    message: err.message || 'Đã xảy ra lỗi máy chủ nội bộ',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  };
+  
+  // Default status code
+  let statusCode = 500;
+
+  // Phân loại lỗi và xử lý từng loại
+  // Mỗi loại lỗi sẽ có status code và thông báo phù hợp
+  if (err.name === 'ValidationError' || err.name === 'SequelizeValidationError') {
+    // Lỗi validation từ Sequelize
+    const errors = err.errors ? err.errors.map((e: any) => ({
+      field: e.path || 'unknown',
+      message: e.message || 'Validation error'
+    })) : [{ message: err.message || 'Validation error' }];
+
+    statusCode = 400;
+    errorResponse.message = 'Lỗi xác thực dữ liệu';
+    errorResponse.errors = errors;
+  } else if (err.name === 'SequelizeUniqueConstraintError') {
+    // Lỗi vi phạm ràng buộc duy nhất trong cơ sở dữ liệu
+    // Ví dụ: email đã tồn tại
+    // Lỗi trùng lặp dữ liệu
+    const errors = err.errors ? err.errors.map((e: any) => ({
+      field: e.path || 'unknown',
+      message: 'Giá trị đã tồn tại trong hệ thống'
+    })) : [{ message: 'Dữ liệu đã tồn tại' }];
+
+    statusCode = 409;
+    errorResponse.message = 'Lỗi trùng lặp dữ liệu';
+    errorResponse.errors = errors;
+  } else if (err.name === 'JsonWebTokenError') {
+    // Lỗi xác thực JWT không hợp lệ
+    statusCode = 401;
+    errorResponse.message = 'Token không hợp lệ';
+  } else if (err.name === 'TokenExpiredError') {
+    // Lỗi token JWT đã hết hạn
+    statusCode = 401;
+    errorResponse.message = 'Token đã hết hạn';
+    errorResponse.code = 'TOKEN_EXPIRED';
+  } else if (err.statusCode) {
+    // Xử lý các lỗi tùy chỉnh có sẵn statusCode
+    // Xử lý lỗi tùy chỉnh
+    statusCode = err.statusCode;
+    errorResponse.message = err.message;
+    if (err.errors) {
+      errorResponse.errors = err.errors;
+    }
+  }
+
+  // Gửi phản hồi lỗi về cho client
+  // Sử dụng status code và thông tin lỗi đã được xác định ở trên
+  return res.status(statusCode).json(errorResponse);
+};
+
+export default errorHandler;

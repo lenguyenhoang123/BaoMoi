@@ -1,0 +1,167 @@
+import { Request, Response, NextFunction } from 'express';
+import AppError from '../utils/appError';
+import logger from '../utils/logger';
+
+interface ErrorWithCode extends Error {
+  code?: string | number;
+  statusCode?: number;
+  status?: string;
+  isOperational?: boolean;
+  errors?: Record<string, { message: string }>;
+  path?: string;
+  value?: any;
+  detail?: string;
+  stack?: string;
+  name: string;
+  message: string;
+}
+
+// Interface cho phản hồi lỗi
+interface ErrorResponse {
+  status: string;
+  message: string;
+  error?: any;
+  stack?: string;
+}
+
+// Xử lý lỗi CastError (ID không hợp lệ)
+const handleCastErrorDB = (err: any): AppError => {
+  const message = `Invalid ${err.path}: ${err.value}`;
+  return new AppError(message, 400);
+};
+
+// Xử lý lỗi trường trùng lặp
+const handleDuplicateFieldsDB = (err: any): AppError => {
+  const value = err.detail.match(/\(([^)]+)\)/)[1];
+  const message = `Duplicate field value: ${value}. Please use another value!`;
+  return new AppError(message, 400);
+};
+
+// Xử lý lỗi validate
+const handleValidationErrorDB = (err: any): AppError => {
+  const errors = Object.values(err.errors).map((el: any) => el.message);
+  const message = `Invalid input data. ${errors.join('. ')}`;
+  return new AppError(message, 400);
+};
+
+// Xử lý lỗi JWT
+const handleJWTError = (): AppError =>
+  new AppError('Invalid token. Please log in again!', 401);
+
+const handleJWTExpiredError = (): AppError =>
+  new AppError('Your token has expired! Please log in again.', 401);
+
+// Gửi lỗi trong môi trường phát triển
+const sendErrorDev = (err: ErrorWithCode, req: Request, res: Response): void => {
+  // API
+  if (req.originalUrl?.startsWith?.('/api')) {
+    res.status(err.statusCode || 500).json({
+      status: err.status || 'error',
+      error: err,
+      message: err.message,
+      stack: err.stack,
+    });
+  } else {
+    // Rendered website
+    console.error('ERROR 💥', err);
+    res.status(err.statusCode || 500).render('error', {
+      title: 'Something went wrong!',
+      msg: err.message,
+    });
+  }
+};
+
+// Gửi lỗi trong môi trường sản phẩm
+const sendErrorProd = (err: ErrorWithCode, req: Request, res: Response): void => {
+  // API
+  if (req.originalUrl?.startsWith?.('/api')) {
+    // Lỗi hoạt động, đã được kiểm soát: gửi thông báo cho client
+    if (err.isOperational) {
+      res.status(err.statusCode || 500).json({
+        status: err.status || 'error',
+        message: err.message,
+      });
+      return;
+    }
+    // Programming or other unknown error: don't leak error details
+    // 1) Log error
+    console.error('ERROR 💥', err);
+    // 2) Send generic message
+    res.status(500).json({
+      status: 'error',
+      message: 'Something went very wrong!',
+    });
+    return;
+  }
+
+  // Rendered website
+  if (err.isOperational) {
+    res.status(err.statusCode || 500).render('error', {
+      title: 'Something went wrong!',
+      msg: err.message,
+    });
+    return;
+  }
+  
+  // Programming or other unknown error: don't leak error details
+  // 1) Log error
+  console.error('ERROR 💥', err);
+  // 2) Send generic message
+  res.status(500).render('error', {
+    title: 'Something went wrong!',
+    msg: 'Please try again later.',
+  });
+};
+
+// Middleware xử lý lỗi toàn cục
+const errorHandler = (
+  err: ErrorWithCode,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void => {
+  err.statusCode = err.statusCode || 500;
+  err.status = err.status || 'error';
+
+  // Ghi log lỗi cho môi trường phát triển
+  if (process.env.NODE_ENV === 'development') {
+    logger.error({
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
+  }
+
+  // Handle specific error types
+  if (err.name === 'CastError') err = handleCastErrorDB(err);
+  if (err.code === '23505') err = handleDuplicateFieldsDB(err);
+  if (err.name === 'ValidationError') err = handleValidationErrorDB(err);
+  if (err.name === 'JsonWebTokenError') err = handleJWTError();
+  if (err.name === 'TokenExpiredError') err = handleJWTExpiredError();
+
+  // 1) Log error
+  if (process.env.NODE_ENV === 'development') {
+    console.error('Error 💥', err);
+  } else if (process.env.NODE_ENV === 'production') {
+    logger.error(err);
+  }
+
+  // 2) Gửi phản hồi lỗi
+  if (process.env.NODE_ENV === 'development') {
+    sendErrorDev(err, req, res);
+  } else if (process.env.NODE_ENV === 'production') {
+    let error = { ...err } as ErrorWithCode;
+    error.message = err.message;
+
+    // Handle specific error types
+    if (err.name === 'CastError') error = handleCastErrorDB(error);
+    if ((err as any).code === 11000) error = handleDuplicateFieldsDB(error);
+    if (err.name === 'ValidationError') error = handleValidationErrorDB(error);
+    if (err.name === 'JsonWebTokenError') error = handleJWTError();
+    if (err.name === 'TokenExpiredError') error = handleJWTExpiredError();
+
+    sendErrorProd(error, req, res);
+  }
+};
+
+export default errorHandler;

@@ -1,0 +1,144 @@
+import nodemailer from 'nodemailer';
+import { logger } from '../utils/logger';
+import { authConfig } from '../config/auth.config';
+
+// Định nghĩa interface cho các tùy chọn email
+interface MailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+}
+
+// Tạo transporter cho nodemailer
+const transporter: nodemailer.Transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true for 465, false for other ports
+  auth: {
+    user: authConfig.email.user,
+    pass: authConfig.email.pass
+  },
+  tls: {
+    rejectUnauthorized: false // Chỉ dùng cho môi trường dev, không dùng cho production
+  }
+});
+
+/**
+ * Gửi email
+ * @param {MailOptions} mailOptions Thông tin email
+ * @returns {Promise<boolean>} Kết quả gửi email (true nếu thành công)
+ */
+export const sendEmail = async (mailOptions: MailOptions): Promise<boolean> => {
+  try {
+    // Sử dụng giá trị mặc định từ cấu hình nếu không có người gửi
+    const from = mailOptions.from || authConfig.email.from;
+    
+    // Gửi email với thông tin đã được định dạng
+    const info = await transporter.sendMail({
+      ...mailOptions,
+      from
+    });
+    
+    logger.info(`Email đã gửi đến ${mailOptions.to}`, {
+      messageId: info.messageId,
+      subject: mailOptions.subject
+    });
+    
+    return true;
+  } catch (error) {
+    logger.error('Lỗi khi gửi email:', error);
+    return false;
+  }
+};
+
+/**
+ * Gửi email chứa mã OTP xác thực tài khoản
+ * @param {string} email Email người nhận
+ * @param {string} name Tên người nhận
+ * @param {string} otp Mã OTP xác thực (6 chữ số)
+ * @returns {Promise<boolean>} Kết quả gửi email
+ */
+export const sendVerificationEmail = async (email: string, name: string, otp: string): Promise<boolean> => {
+  try {
+    const mailOptions: MailOptions = {
+      to: email,
+      subject: 'Mã xác thực tài khoản',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #1f2937;">
+          <h2 style="color: #2563eb;">Xin chào ${name}!</h2>
+          <p>Cảm ơn bạn đã đăng ký tài khoản. Dưới đây là mã xác thực của bạn:</p>
+          
+          <div style="background-color: #f3f4f6; padding: 20px; text-align: center; margin: 25px 0; border-radius: 6px;">
+            <div style="font-size: 24px; letter-spacing: 8px; font-weight: bold; color: #1f2937;">
+              ${otp}
+            </div>
+          </div>
+          
+          <p>Mã xác thực có hiệu lực trong vòng 15 phút.</p>
+          <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này.</p>
+          
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px;">
+            <p>Trân trọng,<br>Đội ngũ hỗ trợ</p>
+          </div>
+        </div>
+      `
+    };
+
+    return await sendEmail(mailOptions);
+  } catch (error) {
+    logger.error('Error sending verification email:', error);
+    throw error;
+  }
+};
+
+/**
+ * Gửi email đặt lại mật khẩu
+ */
+export const sendPasswordResetEmail = async (email: string, name: string, token: string) => {
+  try {
+    const resetUrl = `${authConfig.frontend.baseUrl}${authConfig.frontend.resetPasswordPath}?token=${token}`;
+    
+    const mailOptions = {
+      to: email,
+      subject: 'Đặt lại mật khẩu',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #2d3748;">Xin chào ${name},</h2>
+          <p style="color: #4a5568; line-height: 1.6;">
+            Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. 
+            Vui lòng nhấp vào nút bên dưới để đặt lại mật khẩu:
+          </p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" 
+               style="background-color: #4299e1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+              Đặt lại mật khẩu
+            </a>
+          </div>
+          <p style="color: #4a5568; line-height: 1.6;">
+            Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này hoặc liên hệ 
+            với bộ phận hỗ trợ nếu bạn cho rằng đây là hành động đáng ngờ.
+          </p>
+          <p style="color: #718096; font-size: 14px; margin-top: 30px;">
+            Liên kết đặt lại mật khẩu sẽ hết hạn sau 1 giờ.
+          </p>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+          <p style="color: #a0aec0; font-size: 12px;">
+            Đây là email tự động, vui lòng không trả lời email này.
+          </p>
+        </div>
+      `
+    };
+
+    return await sendEmail(mailOptions);
+  } catch (error) {
+    logger.error('Error sending password reset email:', error);
+    throw error;
+  }
+};
+
+export default {
+  sendEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail
+};

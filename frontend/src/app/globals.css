@@ -1,0 +1,422 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  /* Header styles */
+  header {
+    position: relative;
+    z-index: 50;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    min-height: 4rem; /* Ensure minimum height for header */
+    padding: 0.5rem 0; /* Add vertical padding */
+  }
+  
+  /* Main container */
+  .header-container {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+    max-width: 100%;
+    padding: 0 1rem; /* Add horizontal padding */
+  }
+
+  /* User menu container */
+  .user-menu-container {
+    position: static; /* Thay đổi từ relative sang static */
+    display: inline-block;
+  }
+  
+  /* Dropdown menu */
+  .user-menu-dropdown {
+    position: fixed; /* Thay đổi từ absolute sang fixed */
+    z-index: 9999; /* Tăng z-index lên cao */
+    margin-top: 0.5rem;
+    min-width: 12rem;
+    background-color: white;
+    border-radius: 0.375rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    overflow: visible;
+    /* Đảm bảo dropdown không bị ảnh hưởng bởi container cha */
+    transform: none !important;
+    will-change: transform;
+    isolation: isolate;
+  }
+  
+  /* Ensure dropdown is above other content */
+  .user-menu-dropdown-container {
+    position: relative;
+    z-index: 60;
+  }
+  
+  /* Đảm bảo không có container nào cắt dropdown */
+  body, html, #__next {
+    overflow-x: visible !important;
+  }
+  :root {
+    --color-text: #333333;
+    --color-text-light: #666666;
+    --color-border: #e0e0e0;
+    --color-bg: #f5f5f5;
+    --color-white: #ffffff;
+    --header-height: 4rem;
+  }
+
+  html {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-roboto);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-noto-serif);
+    @apply font-bold leading-tight mb-4;
+  }
+
+  h1 { 
+    @apply text-3xl md:text-4xl;
+  }
+  
+  h2 { 
+    @apply text-2xl md:text-3xl border-l-4 border-primary-600 pl-3 mb-6;
+  }
+  
+  h3 { 
+    @apply text-xl md:text-2xl;
+  }
+  
+  p { 
+    @apply mb-4;
+  }
+  
+  a { 
+    @apply text-primary-600 transition-colors hover:text-primary-800 hover:underline;
+  }
+}
+
+@layer components {
+  .container {
+    @apply w-full max-w-7xl mx-auto px-4;
+  }
+
+  .btn {
+    @apply inline-block px-4 py-2 rounded font-medium text-center cursor-pointer transition-colors text-sm;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary-600 text-white hover:bg-secondary-700;
+  }
+
+  .card {
+    @apply bg-white rounded overflow-hidden shadow-sm transition-all h-full flex flex-col hover:shadow-md hover:-translate-y-0.5;
+  }
+  
+  .card-img {
+    @apply w-full h-40 object-cover;
+  }
+  
+  .card-body {
+    @apply p-4 flex-1 flex flex-col;
+  }
+  
+  .card-title {
+    @apply text-lg font-bold mb-2 leading-snug;
+  }
+  
+  .card-text {
+    @apply text-gray-600 text-sm mb-3 flex-1;
+  }
+  
+  .card-meta {
+    @apply flex items-center text-xs text-gray-500 mt-auto;
+  }
+}
+
+/* Scrollbar styles */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+  scrollbar-color: transparent transparent; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+  width: 0;
+  height: 0;
+  background: transparent; /* Optional: hide scrollbar space */
+}
+
+/* Menu item styles */
+.menu-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: #374151;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  min-width: max-content;
+  position: relative;
+  z-index: 1;
+  line-height: 1.25;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Ensure text doesn't wrap */
+.nav-item-wrapper {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.menu-item:hover {
+  color: #2563eb;
+}
+
+.menu-item.active {
+  color: #2563eb;
+  font-weight: 600;
+  border-bottom-color: #2563eb;
+}
+
+.dark .menu-item {
+  color: #d1d5db;
+}
+
+.dark .menu-item:hover,
+.dark .menu-item.active {
+  color: #60a5fa;
+}
+
+.dark .menu-item.active {
+  border-bottom-color: #60a5fa;
+}
+
+/* Header Styles */
+.header {
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--header-height);
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dark .header {
+  background-color: rgba(17, 24, 39, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.2);
+}
+
+.header.scrolled {
+  height: 60px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.header-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+/* Ẩn thanh cuộn */
+.header-content::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-container {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 0 1rem;
+  margin: 0 -1rem;
+}
+
+.nav-container::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-list {
+  display: flex;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  white-space: nowrap;
+  gap: 0.5rem;
+}
+
+.logo {
+  height: 32px;
+  width: auto;
+  transition: all 0.3s ease;
+}
+
+.header.scrolled .logo {
+  height: 28px;
+}
+
+/* Navigation */
+.nav {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.nav-link {
+  color: var(--color-text);
+  font-weight: 500;
+  padding: 0.5rem 0;
+  position: relative;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--color-primary);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background-color: var(--color-primary);
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  padding: 2rem 0;
+}
+
+/* Footer */
+.footer {
+  background-color: #1a1a1a;
+  color: #999;
+  padding: 3rem 0;
+  margin-top: 3rem;
+}
+
+.footer-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+}
+
+.footer-title {
+  color: white;
+  font-size: 1.125rem;
+  margin-bottom: 1.25rem;
+  font-weight: 600;
+}
+
+.footer-links {
+  list-style: none;
+}
+
+.footer-link {
+  display: block;
+  color: #999;
+  padding: 0.5rem 0;
+  transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+  color: white;
+  text-decoration: none;
+}
+
+/* Responsive Utilities */
+@media (max-width: 1024px) {
+  .container {
+    padding: 0 1.5rem;
+  }
+  
+  .header {
+    padding: 0.5rem 0;
+  }
+  
+  .nav {
+    display: none;
+  }
+  
+  .mobile-menu-btn {
+    display: block;
+  }
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Utility Classes */
+.text-primary { color: var(--color-primary); }
+.text-secondary { color: var(--color-secondary); }
+.text-muted { color: var(--color-text-light); }
+
+.bg-primary { background-color: var(--color-primary); }
+.bg-secondary { background-color: var(--color-secondary); }
+.bg-light { background-color: var(--color-bg); }
+
+.rounded { border-radius: var(--border-radius); }
+.shadow { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+.shadow-md { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+
+/* Grid System */
+.grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
+.grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (min-width: 768px) {
+  .md\:grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .md\:grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+}

@@ -1,0 +1,46 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AppError = void 0;
+class AppError extends Error {
+    constructor(message, statusCode, code) {
+        super(message);
+        this.statusCode = statusCode;
+        this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
+        this.isOperational = true;
+        this.code = code;
+        // Ghi lại stack trace, loại bỏ constructor call khỏi stack
+        Error.captureStackTrace(this, this.constructor);
+    }
+    // Các phương thức factory cho các lỗi thông dụng
+    // Lỗi yêu cầu không hợp lệ (400)
+    static badRequest(message, code) {
+        return new AppError(message, 400, code);
+    }
+    // Lỗi chưa xác thực (401)
+    static unauthorized(message = 'Bạn không có quyền thực hiện hành động này', code) {
+        return new AppError(message, 401, code);
+    }
+    // Lỗi từ chối truy cập (403)
+    static forbidden(message = 'Bạn không có quyền thực hiện hành động này', code) {
+        return new AppError(message, 403, code);
+    }
+    // Lỗi không tìm thấy (404)
+    static notFound(resource = 'Tài nguyên') {
+        return new AppError(`${resource} not found`, 404);
+    }
+    // Lỗi xung đột (409)
+    static conflict(message, code) {
+        return new AppError(message, 409, code);
+    }
+    // Lỗi validate dữ liệu (422)
+    static validationError(message, code) {
+        return new AppError(message, 422, code);
+    }
+    // Lỗi máy chủ nội bộ (500)
+    static internalError(message = 'Lỗi máy chủ nội bộ', code) {
+        return new AppError(message, 500, code);
+    }
+}
+exports.AppError = AppError;
+exports.default = AppError;
+//# sourceMappingURL=appError.js.map
