@@ -1,0 +1,27 @@
+{
+  "restartable": "rs",
+  "ignore": [
+    ".git",
+    "node_modules/**",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ],
+  "verbose": false,
+  "quiet": true,
+  "watch": ["src"],
+  "ext": "ts,json",
+  "exec": "set DEBUG= && set NODE_ENV=development && set SEQUELIZE_LOG=false && ts-node-dev --respawn --transpile-only --no-notify --exit-child --prefer-ts-exts src/server.ts",
+  "env": {
+    "NODE_ENV": "production",
+    "DEBUG": "",
+    "DEBUG_HIDE_DATE": "true",
+    "DEBUG_FD": "3",
+    "express": "",
+    "router": "",
+    "sequelize": "",
+    "SEQUELIZE_LOG": "false",
+    "LOG_LEVEL": "error"
+  },
+  "delay": 1000
+}

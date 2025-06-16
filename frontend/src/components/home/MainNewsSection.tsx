@@ -1,19 +1,20 @@
-import React from 'react';
-import NewsCard, { NewsCardProps } from '../news/NewsCard';
+import * as React from 'react';
+import type { FC } from 'react';
+import NewsCard, { type NewsCardProps } from '../news/NewsCard';
 import Link from 'next/link';
 
 type NewsItem = NewsCardProps & {
   id: string;
 };
 
-type MainNewsSectionProps = {
+interface MainNewsSectionProps {
   featuredNews: NewsItem;
   mainNews: NewsItem[];
   sectionTitle: string;
   sectionUrl: string;
-};
+}
 
-const MainNewsSection: React.FC<MainNewsSectionProps> = ({
+const MainNewsSection: FC<MainNewsSectionProps> = ({
   featuredNews,
   mainNews,
   sectionTitle,

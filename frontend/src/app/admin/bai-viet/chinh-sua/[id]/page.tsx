@@ -1,707 +1,393 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { 
-  Form, 
-  Input, 
-  Button, 
-  Select, 
-  Card, 
-  Row, 
-  Col, 
-  Upload, 
-  message, 
-  Typography, 
-  Tag, 
-  Spin,
-  Tooltip
-} from 'antd';
-import { 
-  ArrowLeftOutlined, 
-  UploadOutlined, 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
-  CheckOutlined, 
-  CloseOutlined,
-  SaveOutlined
-} from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import dynamic from 'next/dynamic';
-import type { RcFile, UploadFile, UploadProps } from 'antd/es/upload/interface';
-import styles from './page.module.css';
 
-// Helper function to convert file to base64
-const getBase64 = (img: RcFile, callback: (url: string) => void) => {
-  const reader = new FileReader();
-  reader.addEventListener('load', () => callback(reader.result as string));
-  reader.readAsDataURL(img);
-};
-
-const { Option } = Select;
-const { Title } = Typography;
-
-const { TextArea } = Input;
-
-// Types
-interface TagType {
-  id?: string;
-  name: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-}
-
-enum PostStatus {
-  DRAFT = 'draft',
-  PUBLISHED = 'published',
-  PENDING = 'pending'
-}
-
-interface Post {
-  id: string;
-  title: string;
-  slug: string;
-  excerpt: string;
-  content: string;
-  meta_title?: string;
-  meta_description?: string;
-  status: PostStatus;
-  category_id: string;
-  tags: TagType[];
-  featured_image?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-interface FormValues {
-  title: string;
-  slug: string;
-  excerpt: string;
-  content: string;
-  status: PostStatus;
-  category_id: string;
-  tags: TagType[];
-  meta_title?: string;
-  meta_description?: string;
-  featured_image?: string;
-}
-
-interface EditPostPageProps {
-  params: {
-    id: string;
-  };
-}
-
-interface EditingTag {
-  index: number;
-  value: string;
-}
-
-const categoryApi = {
-  getCategories: async (): Promise<Category[]> => {
-    try {
-      const response = await fetch('/api/categories');
-      if (!response.ok) {
-        throw new Error('Không thể tải danh sách danh mục');
-      }
-      return response.json();
-    } catch (error) {
-      console.error('Lỗi khi tải danh mục:', error);
-      message.error('Không thể tải danh sách danh mục');
-      return [];
-    }
-  }
-};
-
-const postApi = {
-  getPostById: async (id: string): Promise<Post> => {
-    try {
-      const response = await fetch(`/api/posts/${id}`);
-      if (!response.ok) {
-        throw new Error('Không tìm thấy bài viết');
-      }
-      return response.json();
-    } catch (error) {
-      console.error('Lỗi khi lấy thông tin bài viết:', error);
-      throw error;
-    }
-  },
-  
-  updatePost: async (id: string, data: any) => {
-    try {
-      const response = await fetch(`/api/posts/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw errorData;
-      }
-      
-      return response.json();
-    } catch (error) {
-      console.error('Lỗi khi cập nhật bài viết:', error);
-      throw error;
-    }
-  }
-};
-
-// Dynamically import ReactQuill to avoid SSR issues
-const ReactQuill = dynamic(
-  () => import('react-quill'),
+// Import động trình soạn thảo Markdown để tránh lỗi SSR
+const MDEditor = dynamic(
+  () => import('@uiw/react-md-editor'),
   { 
     ssr: false,
-    loading: () => <span>Đang tải trình soạn thảo...</span>
+    loading: () => <div>Đang tải trình soạn thảo...</div>
   }
 ) as any;
 
-const EditPostPage: React.FC<EditPostPageProps> = ({ params }) => {
-  const [form] = Form.useForm<FormValues>();
+// Định nghĩa kiểu dữ liệu cho form
+type PostFormData = {
+  title: string;
+  slug: string;
+  content: string;
+  status: 'draft' | 'published' | 'archived';
+  image_url: string;
+  tags: string;
+}
+
+// Định nghĩa schema validation cho form
+const postSchema = z.object({
+  title: z.string().min(1, 'Tiêu đề không được để trống'),
+  slug: z.string().min(1, 'Slug không được để trống'),
+  content: z.string().min(1, 'Nội dung không được để trống'),
+  status: z.enum(['draft', 'published', 'archived']),
+  image_url: z.string().url('URL hình ảnh không hợp lệ').optional().or(z.literal('')),
+  tags: z.string().optional()
+});
+
+// Kiểu dữ liệu cho dữ liệu form đã được parse
+type ParsedPostFormData = Omit<PostFormData, 'tags'> & {
+  tags: string[];
+};
+
+export default function EditPostPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { id } = params;
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // State management
-  const [loading, setLoading] = useState<boolean>(true);
-  const [post, setPost] = useState<Post | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [content, setContent] = useState<string>('');
-  const [featuredImage, setFeaturedImage] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isImageUploading, setIsImageUploading] = useState<boolean>(false);
-  const [tags, setTags] = useState<TagType[]>([]);
-  const [editingTag, setEditingTag] = useState<{ index: number; value: string } | null>(null);
-  const [slugModified, setSlugModified] = useState<boolean>(false);
-  const [newTag, setNewTag] = useState<string>('');
-  const [showInMenu, setShowInMenu] = useState<boolean>(true);
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<PostFormData>({
+    resolver: zodResolver(postSchema) as any,
+    defaultValues: {
+      title: '',
+      slug: '',
+      content: '',
+      status: 'draft',
+      image_url: '',
+      tags: ''
+    },
+  });
 
-  // Lấy thông tin bài viết
-  const fetchPost = useCallback(async () => {
-    if (!id) return;
-    
-    try {
-      setLoading(true);
-      const response = await postApi.getPostById(id);
-      setPost(response);
-      setContent(response.content);
-      setFeaturedImage(response.featured_image || '');
-      setTags(response.tags || []);
-      
-      // Đặt giá trị form
-      form.setFieldsValue({
-        title: response.title,
-        slug: response.slug,
-        excerpt: response.excerpt,
-        status: response.status,
-        category_id: response.category_id,
-        meta_title: response.meta_title || response.title,
-        meta_description: response.meta_description || response.excerpt,
-        tags: response.tags || []
-      });
-    } catch (error) {
-      console.error('Lỗi khi tải bài viết:', error);
-      message.error('Không thể tải thông tin bài viết');
-      router.push('/admin/bai-viet');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, form, router]);
+  // Theo dõi nội dung cho MDEditor
+  const content = watch('content');
 
-  // Lấy danh sách danh mục
-  const fetchCategories = useCallback(async () => {
-    try {
-      const categories = await categoryApi.getCategories();
-      setCategories(categories);
-    } catch (error) {
-      console.error('Lỗi khi tải danh mục:', error);
-      message.error('Không thể tải danh sách danh mục');
-    }
-  }, []);
-
-  // Xử lý tải ảnh lên
-  const handleImageUpload = (file: RcFile) => {
-    const isJpgOrPng = file.type === 'image/jpeg' || file.type === 'image/png';
-    if (!isJpgOrPng) {
-      message.error('Bạn chỉ có thể tải lên file JPG/PNG!');
-      return Upload.LIST_IGNORE as unknown as boolean;
-    }
-    const isLt2M = file.size / 1024 / 1024 < 2;
-    if (!isLt2M) {
-      message.error('Kích thước ảnh không được vượt quá 2MB!');
-      return Upload.LIST_IGNORE as unknown as boolean;
-    }
-    return isJpgOrPng && isLt2M;
-  };
-
-  const handleImageChange: UploadProps['onChange'] = async (info) => {
-    if (info.file.status === 'uploading') {
-      try {
-        setIsImageUploading(true);
-      } catch (error) {
-        console.error('Error uploading image:', error);
-        message.error('Có lỗi xảy ra khi tải ảnh lên');
+  // Lấy dữ liệu bài viết
+  useEffect(() => {
+    const fetchPost = async () => {
+      if (params.id === 'new') {
+        setIsLoading(false);
+        return;
       }
-      return;
-    }
 
-    if (info.file.status === 'done') {
-      // Get this url from response in real world.
-      getBase64(info.file.originFileObj as RcFile, (url) => {
-        setIsImageUploading(false);
-        setFeaturedImage(url);
-        form.setFieldsValue({ featured_image: url });
-      });
-    }
-  };
+      try {
+        console.log('Đang tải bài viết với ID:', params.id);
+        
+        // Gọi API thông qua API Gateway
+        const apiUrl = `/api/posts/${params.id}`;
+        console.log('Gọi API:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        console.log('Response status:', response.status, response.statusText);
+        
+        if (!response.ok) {
+          let errorText = await response.text();
+          console.error('Lỗi từ API - Response text:', errorText);
+          
+          // Thử parse JSON nếu có thể
+          try {
+            const errorData = JSON.parse(errorText);
+            console.error('Lỗi từ API (parsed):', errorData);
+            throw new Error(errorData.message || `Lỗi từ API (${response.status})`);
+          } catch (e) {
+            throw new Error(`Lỗi khi tải bài viết: ${response.status} - ${errorText}`);
+          }
+        }
+        
+        const responseData = await response.json();
+        console.log('Dữ liệu thô từ API:', JSON.stringify(responseData, null, 2));
+        
+        // Kiểm tra nếu responseData là mảng và lấy phần tử đầu tiên
+        const postData = responseData.data || responseData;
+        
+        if (!postData || (Array.isArray(postData) && postData.length === 0)) {
+          console.error('Không tìm thấy dữ liệu bài viết trong response:', responseData);
+          throw new Error('Không tìm thấy dữ liệu bài viết');
+        }
+        
+        console.log('Dữ liệu bài viết sau khi xử lý:', postData);
 
-  // Xử lý gửi form
-  const handleSubmit = async (values: FormValues) => {
-    if (!content) {
-      message.warning('Vui lòng nhập nội dung bài viết');
-      return;
-    }
+        console.log('Dữ liệu bài viết sau khi xử lý:', postData);
+        
+        // Đặt giá trị cho form
+        const formData = {
+          title: postData.title || '',
+          slug: postData.slug || '',
+          content: postData.content || '',
+          status: postData.status || 'draft',
+          image_url: postData.image_url || postData.imageUrl || '',
+          tags: Array.isArray(postData.tags) 
+            ? postData.tags.join(', ') 
+            : (postData.tags || '')
+        };
+        
+        console.log('Dữ liệu form sẽ được đặt:', formData);
+        
+        // Đặt giá trị cho từng trường
+        (Object.keys(formData) as Array<keyof typeof formData>).forEach((key) => {
+          setValue(key, formData[key] as any);
+        });
+      } catch (error) {
+        console.error('Lỗi khi tải bài viết:', error);
+        toast.error('Có lỗi xảy ra khi tải bài viết: ' + (error as Error).message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
+    fetchPost();
+  }, [params.id, setValue]);
+
+  // Xử lý khi submit form
+  const onSubmit: SubmitHandler<PostFormData> = async (formData) => {
+    if (isSubmitting) return;
+    
     try {
       setIsSubmitting(true);
       
+      // Chuẩn bị dữ liệu
       const postData = {
-        ...values,
-        content,
-        featured_image: featuredImage,
-        tags: tags.map(tag => ({ name: tag.name }))
+        ...formData,
+        tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()) : []
+      };
+      
+      console.log('Dữ liệu gửi đi:', JSON.stringify(postData, null, 2));
+      
+      const method = params.id === 'new' ? 'POST' : 'PATCH';
+      const url = `/api/posts${params.id === 'new' ? '' : `/${params.id}`}`;
+      
+      console.log(`Gửi ${method} đến ${url}`);
+      
+      // Thêm thông tin xác thực nếu có
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
       };
 
-      console.log('Submitting post data:', postData);
+      // Thêm token xác thực nếu có
+      const token = localStorage.getItem('token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       
-      await postApi.updatePost(id, postData);
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(postData),
+        credentials: 'include', // Quan trọng cho việc gửi cookie
+      });
+
+      // Xử lý response không phải JSON
+      const contentType = response.headers.get('content-type');
+      let data;
       
-      message.success('Cập nhật bài viết thành công!');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('Phản hồi không phải JSON:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: text
+        });
+        
+        let errorMessage = `Lỗi từ máy chủ: ${response.status} ${response.statusText}`;
+        
+        try {
+          // Thử parse nội dung lỗi nếu có
+          const errorData = JSON.parse(text);
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (e) {
+          // Nếu không parse được JSON, sử dụng nội dung lỗi gốc
+          if (text) {
+            errorMessage = text;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
+      
+      console.log('Phản hồi từ server:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        data
+      });
+      
+      if (!response.ok) {
+        throw new Error(data.message || `Lỗi ${response.status}: ${response.statusText}`);
+      }
+      
+      toast.success(params.id === 'new' ? 'Tạo bài viết thành công' : 'Cập nhật bài viết thành công');
       router.push('/admin/bai-viet');
+      
     } catch (error: any) {
-      console.error('Lỗi khi cập nhật bài viết:', error);
-      message.error(
-        error.response?.data?.message || 'Có lỗi xảy ra khi cập nhật bài viết!'
-      );
+      console.error('Lỗi khi lưu bài viết:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        response: error.response
+      });
+      toast.error(error.message || 'Có lỗi xảy ra khi lưu bài viết');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Render loading state
-  if (loading || !post) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Spin size="large" tip="Đang tải..." />
-      </div>
-    );
-  }
-
-  // Tạo slug từ tiêu đề
-  const generateSlug = (title: string): string => {
-    if (!title) return '';
-    return title
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-');
-  };
-
-  // Xử lý thay đổi tiêu đề để tự động tạo slug
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const title = e.target.value;
-    form.setFieldsValue({ title });
-    
-    // Auto-generate slug from title if slug is empty or hasn't been manually modified
-    if (!slugModified && title) {
-      const generatedSlug = title
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-');
-      
-      form.setFieldsValue({ slug: generatedSlug });
-    }
-  };
-
-  // Xử lý thay đổi slug để lưu trạng thái đã được chỉnh sửa
-  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSlugModified(true);
-  };
-
-  // Xử lý xóa ảnh đại diện
-  const handleRemoveImage = () => {
-    setFeaturedImage('');
-    form.setFieldsValue({ featured_image: undefined });
-  };
-
-  // Xử lý thêm tag mới
-  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newTag.trim()) {
-      e.preventDefault();
-      const tagToAdd = { name: newTag.trim() };
-      const updatedTags = [...tags, tagToAdd];
-      setTags(updatedTags);
-      form.setFieldsValue({ tags: updatedTags });
-      setNewTag('');
-    }
-  };
-
-  // Xử lý xóa tag
-  const handleRemoveTag = (tagIndex: number) => {
-    const updatedTags = tags.filter((_, index) => index !== tagIndex);
-    setTags(updatedTags);
-    form.setFieldsValue({ tags: updatedTags });
-  };
-
-  // Xử lý cập nhật tag
-  const handleUpdateTag = (tagIndex: number, newName: string) => {
-    if (!newName.trim()) {
-      handleRemoveTag(tagIndex);
-      return;
-    }
-
-    const updatedTags = [...tags];
-    updatedTags[tagIndex] = { ...updatedTags[tagIndex], name: newName.trim() };
-    setTags(updatedTags);
-    form.setFieldsValue({ tags: updatedTags });
-    setEditingTag(null);
-  };
-
-  useEffect(() => {
-    if (!params?.id) {
-      message.error('Không tìm thấy ID bài viết');
-      router.push('/admin/bai-viet');
-      return;
-    }
-    
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        await Promise.all([
-          fetchPost(),
-          fetchCategories()
-        ]);
-      } catch (error) {
-        console.error('Lỗi khi tải dữ liệu:', error);
-        message.error('Không thể tải dữ liệu bài viết');
-        router.push('/admin/bai-viet');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadData();
-  }, [params.id]);
-
-  if (loading || !post) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Spin size="large" tip="Đang tải..." />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.header}>
-        <div className="flex items-center">
-          <Button 
-            type="text" 
-            icon={<ArrowLeftOutlined />} 
-            onClick={() => router.back()}
-            className="mr-2"
-          >
-            Quay lại
-          </Button>
-          <Title level={4} className="mb-0">Chỉnh sửa bài viết</Title>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-6">
+        {params.id === 'new' ? 'Viết bài mới' : 'Chỉnh sửa bài viết'}
+      </h1>
+      
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="mb-6">
+            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
+              Tiêu đề <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="title"
+              type="text"
+              {...register('title')}
+              className={`w-full px-3 py-2 border rounded-md ${errors.title ? 'border-red-500' : 'border-gray-300'}`}
+              placeholder="Nhập tiêu đề bài viết"
+            />
+            {errors.title && (
+              <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
+              Đường dẫn (URL) <span className="text-red-500">*</span>
+            </label>
+            <input
+              id="slug"
+              type="text"
+              {...register('slug')}
+              className={`w-full px-3 py-2 border rounded-md ${errors.slug ? 'border-red-500' : 'border-gray-300'}`}
+              placeholder="duong-dan-bai-viet"
+            />
+            {errors.slug && (
+              <p className="mt-1 text-sm text-red-600">{errors.slug.message}</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="image_url" className="block text-sm font-medium text-gray-700 mb-1">
+              URL hình ảnh
+            </label>
+            <input
+              id="image_url"
+              type="url"
+              {...register('image_url')}
+              className={`w-full px-3 py-2 border rounded-md ${errors.image_url ? 'border-red-500' : 'border-gray-300'}`}
+              placeholder="https://example.com/image.jpg"
+            />
+            {errors.image_url && (
+              <p className="mt-1 text-sm text-red-600">{errors.image_url.message}</p>
+            )}
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-1">
+              Thẻ (cách nhau bằng dấu phẩy)
+            </label>
+            <input
+              id="tags"
+              type="text"
+              {...register('tags')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="công nghệ, lập trình, tin tức"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+              Trạng thái
+            </label>
+            <select
+              id="status"
+              {...register('status')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="draft">Bản nháp</option>
+              <option value="published">Công khai</option>
+              <option value="archived">Lưu trữ</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <Button 
-            type="default" 
-            className="mr-2"
+
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Nội dung <span className="text-red-500">*</span>
+          </label>
+          <div className="prose max-w-none" data-color-mode="light">
+            <MDEditor
+              value={content}
+              onChange={(val: string | undefined) => setValue('content', val || '')}
+              height={500}
+              className={errors.content ? 'border border-red-500' : ''}
+            />
+          </div>
+          {errors.content && (
+            <p className="mt-1 text-sm text-red-600">{errors.content.message}</p>
+          )}
+        </div>
+
+        <div className="flex justify-end space-x-4">
+          <button
+            type="button"
             onClick={() => router.push('/admin/bai-viet')}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50"
+            disabled={isSubmitting}
           >
             Hủy
-          </Button>
-          <Button 
-            type="primary" 
-            icon={<SaveOutlined />} 
-            onClick={() => form.submit()}
-            loading={isSubmitting}
+          </button>
+          <button
+            type="submit"
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            disabled={isSubmitting}
           >
-            Lưu thay đổi
-          </Button>
+            {isSubmitting ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Đang lưu...
+              </span>
+            ) : (
+              'Lưu bài viết'
+            )}
+          </button>
         </div>
-      </div>
-      
-      <div className={styles.contentWrapper}>
-        <div className={styles.formContainer}>
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSubmit}
-            initialValues={{
-              ...post,
-              status: post?.status || PostStatus.DRAFT,
-              tags: post?.tags || []
-            }}
-          >
-        <Row gutter={24}>
-          <Col span={16}>
-            <Card title="Nội dung chính" className="mb-6">
-              <Form.Item
-                name="title"
-                label="Tiêu đề bài viết"
-                rules={[{ required: true, message: 'Vui lòng nhập tiêu đề' }]}
-              >
-                <Input 
-                  placeholder="Nhập tiêu đề bài viết" 
-                  onChange={handleTitleChange}
-                />
-              </Form.Item>
-
-              <Form.Item
-                name="slug"
-                label="Đường dẫn tĩnh"
-                rules={[{ required: true, message: 'Vui lòng nhập đường dẫn' }]}
-              >
-                <Input placeholder="duong-dan-bai-viet" />
-              </Form.Item>
-
-              <Form.Item
-                name="excerpt"
-                label="Mô tả ngắn"
-                rules={[{ required: true, message: 'Vui lòng nhập mô tả' }]}
-              >
-                <TextArea rows={3} placeholder="Nhập mô tả ngắn về bài viết" />
-              </Form.Item>
-
-              <Form.Item
-                label="Nội dung"
-                name="content"
-                rules={[{ required: true, message: 'Vui lòng nhập nội dung' }]}
-              >
-                <ReactQuill
-                  theme="snow"
-                  value={content}
-                  onChange={setContent}
-                  modules={{
-                    toolbar: [
-                      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-                      ['bold', 'italic', 'underline', 'strike'],
-                      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                      ['link', 'image'],
-                      ['clean']
-                    ],
-                  }}
-                  className="h-64 mb-16"
-                />
-              </Form.Item>
-            </Card>
-
-            <Card title="Cài đặt SEO" className="mb-6">
-              <Form.Item
-                name="meta_title"
-                label="Tiêu đề SEO"
-                tooltip="Nếu để trống, hệ thống sẽ tự động lấy tiêu đề bài viết"
-              >
-                <Input placeholder="Nhập tiêu đề SEO" />
-              </Form.Item>
-
-              <Form.Item
-                name="meta_description"
-                label="Mô tả SEO"
-                tooltip="Nếu để trống, hệ thống sẽ tự động lấy mô tả ngắn"
-              >
-                <TextArea rows={3} placeholder="Nhập mô tả SEO" />
-              </Form.Item>
-            </Card>
-          </Col>
-
-          <Col span={8}>
-            <Card title="Xuất bản" className="mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <span>Trạng thái:</span>
-                <Form.Item name="status" noStyle>
-                  <Select 
-                    style={{ width: 150 }}
-                    onChange={(value) => form.setFieldsValue({ status: value })}
-                  >
-                    <Select.Option value={PostStatus.PUBLISHED}>Công khai</Select.Option>
-                    <Select.Option value={PostStatus.DRAFT}>Bản nháp</Select.Option>
-                    <Select.Option value={PostStatus.PENDING}>Chờ duyệt</Select.Option>
-                  </Select>
-                </Form.Item>
-              </div>
-
-              <div className="flex justify-between">
-                <Button 
-                  type="primary" 
-                  htmlType="submit" 
-                  icon={<SaveOutlined />} 
-                  loading={isSubmitting}
-                  block
-                >
-                  Lưu thay đổi
-                </Button>
-              </div>
-            </Card>
-
-            <Card title="Danh mục" className="mb-6">
-              <Form.Item
-                name="category_id"
-                rules={[{ required: true, message: 'Vui lòng chọn danh mục' }]}
-              >
-                <Select
-                  placeholder="Chọn danh mục"
-                  loading={loading}
-                >
-                  {categories.map((category) => (
-                    <Option key={category.id} value={category.id}>
-                      {category.name}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Card>
-
-            <Card title="Thẻ" className="mb-6">
-              <div className="mb-4">
-                <Input
-                  placeholder="Nhập và nhấn Enter để thêm thẻ"
-                  onKeyDown={handleAddTag}
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag, index) => (
-                  <Tag
-                    key={tag.id || index}
-                    closable
-                    onClose={(e) => {
-                      e.preventDefault();
-                      handleRemoveTag(index);
-                    }}
-                    className="flex items-center"
-                  >
-                    {editingTag?.index === index ? (
-                      <Input
-                        autoFocus
-                        size="small"
-                        style={{ width: 100 }}
-                        defaultValue={tag.name}
-                        onBlur={(e) => handleUpdateTag(index, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            handleUpdateTag(index, (e.target as HTMLInputElement).value);
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span 
-                        className="cursor-pointer"
-                        onClick={() => setEditingTag({ index, value: tag.name })}
-                      >
-                        {tag.name}
-                      </span>
-                    )}
-                  </Tag>
-                ))}
-              </div>
-            </Card>
-
-            <Card title="Ảnh đại diện">
-              <Form.Item name="featured_image">
-                <Upload
-                  name="featured_image"
-                  listType="picture-card"
-                  className="avatar-uploader"
-                  showUploadList={false}
-                  beforeUpload={handleImageUpload}
-                  onChange={handleImageChange}
-                  disabled={isImageUploading}
-                >
-                  {featuredImage ? (
-                    <div className="relative">
-                      <img 
-                        src={featuredImage} 
-                        alt="Ảnh đại diện" 
-                        className="w-full h-40 object-cover rounded"
-                      />
-                      <Button
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                        onClick={handleRemoveImage}
-                        className="absolute top-1 right-1 bg-white rounded-full p-1 shadow"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-4">
-                      {isImageUploading ? (
-                        <Spin />
-                      ) : (
-                        <>
-                          <UploadOutlined className="text-2xl mb-2" />
-                          <div>Tải ảnh lên</div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </Upload>
-                <div className="text-xs text-gray-500 mt-2">
-                  Tỷ lệ khuyến nghị: 1200x630px. Dung lượng tối đa: 2MB
-                </div>
-              </Form.Item>
-            </Card>
-
-            <Card title="Từ khóa SEO" className="mb-6">
-              <Form.Item
-                name="meta_keywords"
-                label="Từ khóa SEO (cách nhau bằng dấu phẩy)"
-              >
-                <Input placeholder="Ví dụ: tin tức, thời sự, xã hội" />
-              </Form.Item>
-              <div className="text-xs text-gray-500">
-                Các từ khóa giúp bài viết của bạn dễ dàng được tìm thấy hơn trên công cụ tìm kiếm
-              </div>
-            </Card>
-          </Col>
-        </Row>
-
-          </Form>
-        </div>
-      </div>
-      
-      <div className={styles.footer}>
-        <Button 
-          onClick={() => router.push('/admin/bai-viet')}
-          disabled={isSubmitting}
-        >
-          Hủy
-        </Button>
-        <Button 
-          type="primary" 
-          htmlType="submit" 
-          loading={isSubmitting}
-          icon={<SaveOutlined />}
-          onClick={() => form.submit()}
-        >
-          Lưu thay đổi
-        </Button>
-      </div>
+      </form>
     </div>
   );
-};
-
-export default EditPostPage;
+}

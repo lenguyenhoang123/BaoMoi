@@ -1,12 +1,27 @@
 declare module 'react-quill' {
   import * as React from 'react';
 
+  interface QuillOptions {
+    bounds?: HTMLElement | string;
+    debug?: string | boolean;
+    formats?: string[];
+    modules?: Record<string, any>;
+    placeholder?: string;
+    readOnly?: boolean;
+    scrollingContainer?: HTMLElement | string | null;
+    theme?: string;
+  }
+
   interface ReactQuillProps {
-    value?: string;
-    defaultValue?: string;
+    id?: string;
+    className?: string;
+    style?: React.CSSProperties;
+    value?: string | number;
+    defaultValue?: string | number;
     readOnly?: boolean;
     placeholder?: string;
     tabIndex?: number;
+    bounds?: string | HTMLElement;
     onChange?: (
       content: string,
       delta: any,
@@ -31,13 +46,10 @@ declare module 'react-quill' {
     onKeyPress?: React.KeyboardEventHandler;
     onKeyDown?: React.KeyboardEventHandler;
     onKeyUp?: React.KeyboardEventHandler;
-    style?: React.CSSProperties;
-    className?: string;
-    theme?: string;
-    modules?: Record<string, any>;
     formats?: string[];
-    bounds?: string | HTMLElement;
     children?: React.ReactElement;
+    modules?: Record<string, any>;
+    theme?: string;
     preserveWhitespace?: boolean;
     scrollingContainer?: string | HTMLElement;
   }

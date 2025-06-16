@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { User, LogOut, Settings, FileText, Plus } from 'lucide-react';
+import { User, LogOut, Settings, FileText, Plus, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function UserMenu() {
@@ -52,7 +52,8 @@ export default function UserMenu() {
   useEffect(() => {
     if (isOpen && buttonRef.current && portalRef.current) {
       const updatePosition = () => {
-        const rect = buttonRef.current!.getBoundingClientRect();
+        if (!buttonRef.current) return;
+        const rect = buttonRef.current.getBoundingClientRect();
         setPosition({
           top: rect.bottom,
           left: rect.left,
@@ -71,6 +72,9 @@ export default function UserMenu() {
         window.removeEventListener('scroll', updatePosition, true);
       };
     }
+    
+    // Return undefined nếu không có gì để dọn dẹp
+    return undefined;
   }, [isOpen]);
 
   // Xử lý click ra ngoài
@@ -156,6 +160,20 @@ export default function UserMenu() {
           </div>
           <span className="group-hover/item:text-amber-600 font-medium">Cài đặt</span>
         </Link>
+        
+        {/* Thêm mục Quản lý người dùng nếu là admin */}
+        {user.role === 'admin' && (
+          <Link 
+            href="/admin/nguoi-dung" 
+            className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
+            onClick={() => setIsOpen(false)}
+          >
+            <div className="p-1.5 mr-3 rounded-md bg-purple-50 group-hover/item:bg-purple-100 transition-colors">
+              <Users className="h-4 w-4 text-purple-600" />
+            </div>
+            <span className="group-hover/item:text-purple-600 font-medium">Quản lý người dùng</span>
+          </Link>
+        )}
         
         <div className="border-t border-gray-100 my-1" />
         

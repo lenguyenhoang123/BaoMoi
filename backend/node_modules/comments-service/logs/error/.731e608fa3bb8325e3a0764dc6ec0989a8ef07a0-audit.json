@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "D:\\Vietprodev\\BaoMoi\\backend\\services\\comments-service\\logs\\error\\.731e608fa3bb8325e3a0764dc6ec0989a8ef07a0-audit.json",
+    "files": [
+        {
+            "date": 1750043848969,
+            "name": "D:\\Vietprodev\\BaoMoi\\backend\\services\\comments-service\\logs\\error\\error-2025-06-16.log",
+            "hash": "1ca5455e9d816dc2f796e91622ab94f6a72616340193113be320a0d66283da5d"
+        }
+    ],
+    "hashType": "sha256"
+}

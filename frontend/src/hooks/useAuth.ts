@@ -2,12 +2,28 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoginCredentials, RegisterData, User, authService } from '../services/auth';
 
+/**
+ * Định nghĩa kiểu dữ liệu cho ngữ cảnh xác thực
+ * @property {User | null} user - Thông tin người dùng hiện tại
+ * @property {string | null} token - Token xác thực hiện tại
+ * @property {boolean} isAuthenticated - Trạng thái đăng nhập
+ * @property {boolean} isLoading - Trạng thái đang tải
+ * @property {Function} login - Hàm đăng nhập
+ * @property {Function} register - Hàm đăng ký
+ * @property {Function} logout - Hàm đăng xuất
+ * @property {Function} refreshToken - Hàm làm mới token
+ * @property {Function} getCurrentUser - Lấy thông tin người dùng hiện tại
+ * @property {Function} updateUser - Cập nhật thông tin người dùng
+ * @property {string | null} error - Thông báo lỗi (nếu có)
+ * @property {Function} clearError - Xóa thông báo lỗi
+ */
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<{ success: boolean; user: User }>;
   register: (data: RegisterData) => Promise<{ requiresVerification: boolean; message?: string }>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<string | null>;
@@ -17,6 +33,11 @@ interface AuthContextType {
   clearError: () => void;
 }
 
+/**
+ * Hook quản lý xác thực người dùng
+ * Cung cấp các hàm và trạng thái liên quan đến đăng nhập, đăng ký, đăng xuất
+ * @returns {AuthContextType} Đối tượng chứa các hàm và trạng thái xác thực
+ */
 export const useAuth = (): AuthContextType => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -77,40 +98,43 @@ export const useAuth = (): AuthContextType => {
       console.log('Phản hồi từ authService.login:', response);
       
       if (response && response.success) {
+        // Lưu token vào storage tương ứng
+        const storage = credentials.rememberMe ? localStorage : sessionStorage;
+        storage.setItem('token', response.token);
+        
         // Kiểm tra cả response.data và response.data.user (tùy thuộc vào cấu trúc trả về)
-        const userData = response.data || response.user || null;
+        let userData: User | null = null;
+        
+        if (response.data) {
+          userData = response.data as User;
+        } else if (response.user) {
+          userData = response.user as User;
+        }
         
         if (!userData) {
           console.warn('Không nhận được thông tin người dùng từ phản hồi, thử lấy lại...');
           // Thử lấy lại thông tin người dùng nếu không có trong phản hồi
           const userResponse = await authService.getCurrentUser();
-          if (userResponse && userResponse.success && (userResponse.data || userResponse.user)) {
-            const user = userResponse.data || userResponse.user;
-            if (user) {
-              setUser(user);
-              // Lưu token từ response đăng nhập ban đầu
-              setToken(response.token);
-              console.log('Đã cập nhật thông tin người dùng từ getCurrentUser');
-            } else {
-              throw new Error('Không tìm thấy thông tin người dùng');
+          if (userResponse && userResponse.success) {
+            if (userResponse.data) {
+              userData = userResponse.data as User;
+            } else if (userResponse.user) {
+              userData = userResponse.user as User;
             }
-          } else {
-            throw new Error(userResponse?.message || 'Không thể lấy thông tin người dùng');
           }
-        } else {
-          setUser(userData);
-          setToken(response.token);
-          console.log('Đã cập nhật thông tin người dùng từ phản hồi đăng nhập');
         }
         
-        // Lưu token vào storage tương ứng
-        const storage = credentials.rememberMe ? localStorage : sessionStorage;
-        storage.setItem('token', response.token);
-        
-        console.log('Đăng nhập thành công, đang chuyển hướng...');
-        // Chuyển hướng về trang chủ
-        router.push('/');
-        router.refresh(); // Làm mới dữ liệu
+        if (userData) {
+          // Cập nhật state với thông tin người dùng
+          setUser(userData);
+          setToken(response.token);
+          console.log('Đã cập nhật thông tin người dùng');
+          
+          // Trả về thông tin user để sử dụng cho việc hiển thị thông báo
+          return { success: true, user: userData };
+        } else {
+          throw new Error('Không thể lấy thông tin người dùng');
+        }
       } else {
         throw new Error(response?.message || 'Đăng nhập thất bại');
       }

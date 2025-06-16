@@ -5,7 +5,7 @@ import type { NextRequest } from 'next/server';
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3004',
-  'http://localhost:3001',
+  'http://localhost:3000',
   'http://192.168.100.50:3004'
 ];
 

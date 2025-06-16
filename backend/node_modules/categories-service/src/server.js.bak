@@ -1,0 +1,416 @@
+// Ưu tiên tải file .env trong thư mục categories-service trước, sau đó mới tải file .env ở thư mục gốc
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+// Nếu không tìm thấy biến môi trường trong file .env của categories-service, sẽ tải từ file .env ở thư mục gốc
+if (!process.env.DB_NAME) {
+  require('dotenv').config({ path: path.join(__dirname, '../../../.env') });
+}
+const express = require('express');
+const morgan = require('morgan');
+const cors = require('cors');
+const { createLogger, format, transports } = require('winston');
+
+// Import routes
+const categoryRoutes = require('./routes/category.routes');
+const errorHandler = require('./middlewares/error.handler');
+
+// Khởi tạo ứng dụng
+const app = express();
+
+// Cấu hình cổng
+const PORT = process.env.PORT || 3009;
+
+// Khởi tạo logger
+const logger = createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: format.combine(
+    format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    format.errors({ stack: true }),
+    format.splat(),
+    format.json()
+  ),
+  defaultMeta: { service: 'categories-service' },
+  transports: [
+    // Ghi log ra console
+    new transports.Console({
+      format: format.combine(
+        format.colorize(),
+        format.printf(
+          ({ level, message, timestamp, stack }) => 
+            `${timestamp} [${level}]: ${stack || message}`
+        )
+      )
+    }),
+    new transports.File({ 
+      filename: 'logs/error.log', 
+      level: 'error' 
+    }),
+    new transports.File({ 
+      filename: 'logs/combined.log' 
+    })
+  ]
+});
+
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3004',
+  'http://192.168.100.50:3004',
+  '*' // Cho phép tất cả trong môi trường phát triển
+];
+
+const corsOptions = {
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed origins
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    
+    logger.warn(`CORS: Origin ${origin} not allowed`);
+    return callback(null, true); // Cho phép tất cả trong môi trường phát triển
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Origin', 
+    'X-Requested-With', 
+    'Content-Type', 
+    'Accept', 
+    'Authorization', 
+    'Cache-Control',
+    'Pragma',
+    'X-CSRF-Token',
+    'Accept-Version',
+    'Content-Length',
+    'Content-MD5',
+    'Date',
+    'X-Api-Version'
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Range'
+  ],
+  maxAge: 86400,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// Apply CORS with options
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3004',
+  'http://192.168.100.50:3004',
+  '*' // Cho phép tất cả trong môi trường phát triển
+];
+
+const corsOptions = {
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed origins
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    
+    logger.warn(`CORS: Origin ${origin} not allowed`);
+    return callback(null, true); // Cho phép tất cả trong môi trường phát triển
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Origin', 
+    'X-Requested-With', 
+    'Content-Type', 
+    'Accept', 
+    'Authorization', 
+    'Cache-Control',
+    'Pragma',
+    'X-CSRF-Token',
+    'Accept-Version',
+    'Content-Length',
+    'Content-MD5',
+    'Date',
+    'X-Api-Version'
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Range'
+  ],
+  maxAge: 86400,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// Apply CORS with options
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Log all requests
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.originalUrl}`, {
+    ip: req.ip,
+    origin: req.headers.origin,
+    userAgent: req.headers['user-agent']
+  });
+  next();
+});
+
+// Log HTTP requests
+app.use(morgan('combined', {
+  stream: {
+    write: (message) => {
+      logger.http(message.trim());
+    },
+  },
+  skip: (req, res) => {
+    // Bỏ qua các request tới các tài nguyên tĩnh
+    return req.originalUrl.startsWith('/static/') || 
+           req.originalUrl === '/favicon.ico';
+  }
+}));
+
+// Log environment variables (without sensitive data)
+logger.info('Environment variables loaded', {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: PORT,
+  DB_HOST: process.env.DB_HOST,
+  DB_PORT: process.env.DB_PORT,
+  DB_NAME: process.env.DB_NAME,
+  DB_USER: process.env.DB_USER ? '***' : undefined,
+  DB_PASSWORD: process.env.DB_PASSWORD ? '***' : undefined
+});
+
+// Configure base path
+const BASE_PATH = '/api';
+
+// API Documentation
+app.get(BASE_PATH, (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Welcome to Categories Service API',
+    version: '1.0.0',
+    documentation: `${req.protocol}://${req.get('host')}${BASE_PATH}/categories`,
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      `${BASE_PATH}/categories`,
+      `${BASE_PATH}/categories/:id`
+    ]
+  });
+});
+
+// Register category routes with root path
+app.use('/', categoryRoutes);
+
+// Add a test endpoint
+app.get(`${BASE_PATH}/test`, (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Test endpoint is working!',
+    service: 'categories-service',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check endpoint (should be before other routes)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    service: 'categories-service',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    database: {
+      connected: true,
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      name: process.env.DB_NAME,
+      user: process.env.DB_USER
+    }
+  });
+});
+
+// Test route
+app.get(`${BASE_PATH}/test`, (req, res) => {
+  res.status(200).json({ 
+    success: true,
+    message: 'Test endpoint is working!',
+    timestamp: new Date().toISOString(),
+    node: process.version
+  });
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.redirect('/api');
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Endpoint ${req.originalUrl} not found on this server`,
+    path: req.originalUrl
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error:', { 
+    error: err.message, 
+    stack: err.stack,
+    url: req.originalUrl,
+    method: req.method,
+    body: req.body,
+    params: req.params,
+    query: req.query
+  });
+  
+  if (res.headersSent) {
+    return next(err);
+  }
+  
+  res.status(500).json({
+    success: false,
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+
+// Start server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  const host = server.address().address;
+  const port = server.address().port;
+  
+  const serverUrl = `http://${host === '::' ? 'localhost' : host}:${port}`;
+  
+  console.log('='.repeat(80));
+  console.log(`🚀 Categories Service is running on ${serverUrl}`);
+  console.log(`📡 Health check: ${serverUrl}/health`);
+  console.log(`🔍 API Documentation: ${serverUrl}${BASE_PATH}/categories`);
+  console.log('='.repeat(80));
+  
+  logger.info(`Server started on ${serverUrl}`);
+  
+  // Test database connection and run migrations if needed
+  if (process.env.NODE_ENV !== 'test') {
+    const db = require('./config/database');
+    const fs = require('fs');
+    const path = require('path');
+    
+    db.testConnection()
+      .then(async () => {
+        logger.info('Database connected successfully');
+        console.log('='.repeat(80));
+        
+        // Check if categories table exists
+        try {
+          const client = await db.getClient();
+          
+          try {
+            // Check if categories table exists
+            const tableCheckResult = await client.query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'categories'
+              );
+            `);
+            
+            const tableExists = tableCheckResult.rows[0].exists;
+            
+            if (!tableExists) {
+              logger.info('Categories table does not exist, running migration...');
+              
+              // Read and execute the migration file
+              const migrationFilePath = path.join(__dirname, '../migrations/001_create_categories_table.sql');
+              const migrationSQL = fs.readFileSync(migrationFilePath, 'utf8');
+              
+              logger.info('Executing migration: 001_create_categories_table.sql');
+              
+              // Execute the migration in a transaction
+              await client.query('BEGIN');
+              await client.query(migrationSQL);
+              await client.query('COMMIT');
+              
+              logger.info('✅ Database migrations completed successfully');
+            } else {
+              logger.info('Categories table already exists, skipping migrations');
+            }
+          } catch (error) {
+            // Rollback transaction if there was an error
+            await client.query('ROLLBACK');
+            
+            logger.error('❌ Migration failed:', {
+              message: error.message,
+              code: error.code,
+              stack: error.stack
+            });
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          logger.error('❌ Failed to run migrations:', {
+            message: error.message,
+            code: error.code,
+            stack: error.stack
+          });
+        }
+      })
+      .catch(err => {
+        logger.error('Database connection error:', err);
+        process.exit(1);
+      });
+  }
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
+  } else {
+    logger.error('❌ Server error:', {
+      message: error.message,
+      code: error.code,
+      stack: error.stack
+    });
+  }
+  process.exit(1);
+});
+
+// Handle process termination
+process.on('SIGTERM', () => {
+  logger.info('🛑 Received SIGTERM. Shutting down gracefully...');
+  server.close(() => {
+    logger.info('✅ Server has been stopped');
+    process.exit(0);
+  });
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('❌ Uncaught Exception:', error);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+module.exports = server;

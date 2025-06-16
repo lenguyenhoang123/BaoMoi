@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useState, useEffect } from 'react';
-import { usePosts } from '../../hooks/usePosts';
+import { usePosts } from '../../hooks/useNews';
 import { useCategories } from '../../hooks/useCategories';
 import { useAuth } from '../../hooks/useAuth';
 import Link from 'next/link';
@@ -56,7 +56,7 @@ interface CreateCommentData {
 export default function NewsDetail({ params }: { params: NewsDetailParams }) {
   const { getPostDetail, loading: postLoading, error: postError } = usePosts();
   const { categories } = useCategories();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -91,11 +91,12 @@ export default function NewsDetail({ params }: { params: NewsDetailParams }) {
 
     try {
       setLoading(true);
-      const comment = await commentsService.createComment({
-        content: newComment,
-        postId: post.id,
-        authorId: user.id
-      } as CreateCommentData);
+      // Gửi bình luận mới
+      const comment = await commentsService.addComment(
+        post.id,
+        newComment,
+        null // parentId
+      );
       if (comment) {
         setComments([...comments, comment as Comment]);
       }
@@ -128,9 +129,9 @@ export default function NewsDetail({ params }: { params: NewsDetailParams }) {
           {user ? (
             <div className="bg-white rounded-lg shadow p-4 mb-4">
               <div className="flex space-x-3">
-                <img 
-                  src="/images/default-avatar.png" 
-                  alt={user?.name || 'User'}
+                <img
+                  src="/images/default-avatar.png"
+                  alt={user?.email ? user.email.split('@')[0] : 'User'}
                   className="w-10 h-10 rounded-full"
                 />
                 <div className="flex-1">
@@ -162,8 +163,8 @@ export default function NewsDetail({ params }: { params: NewsDetailParams }) {
             {comments.map((comment) => (
               <div key={comment.id} className="bg-white rounded-lg shadow p-4">
                 <div className="flex items-start">
-                  <img 
-                    src={comment.author?.avatar || '/images/default-avatar.png'} 
+                  <img
+                    src={comment.author?.avatar || '/images/default-avatar.png'}
                     alt={comment.author?.name || 'User'}
                     className="w-10 h-10 rounded-full"
                   />
@@ -185,15 +186,15 @@ export default function NewsDetail({ params }: { params: NewsDetailParams }) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {relatedPosts.map((post) => (
               <div key={post.id} className="bg-white rounded-lg shadow">
-                <img 
-                  src={post.image || '/images/news-related.jpg'} 
-                  alt={post.title} 
+                <img
+                  src={post.image || '/images/news-related.jpg'}
+                  alt={post.title}
                   className="w-full h-48 object-cover"
                 />
                 <div className="p-4">
                   <h3 className="text-lg font-semibold mb-2">{post.title}</h3>
                   <p className="text-gray-600 text-sm mb-2">{post.publishedAt ? new Date(post.publishedAt).toLocaleDateString() : 'Unknown'}</p>
-                  <Link 
+                  <Link
                     href={`/news/${post.slug}`}
                     className="text-red-700 hover:text-red-900"
                   >

@@ -1,27 +1,34 @@
 'use client';
 
-import { Roboto, Noto_Serif } from 'next/font/google';
-import Header from '@/components/layout/Header';
-import Footer from '@/components/layout/Footer';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { ConfigProvider, App as AntdApp } from 'antd';
+import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
+import { ConfigProvider, Spin } from 'antd';
 import { antdTheme } from './antd.config';
 import { StyleProvider } from '@ant-design/cssinjs';
+import { MessageProvider } from '@/components/providers/MessageProvider';
 import './globals.css';
 
-const roboto = Roboto({
-  weight: ['300', '400', '500', '700'],
-  subsets: ['vietnamese', 'latin'],
-  variable: '--font-roboto',
-  display: 'swap',
+// Dynamic import for better performance
+const Header = dynamic(() => import('@/components/layout/Header'), {
+  ssr: false,
+  loading: () => <div className="h-16 bg-white shadow-sm"></div>
 });
 
-const notoSerif = Noto_Serif({
-  weight: ['400', '700'],
-  subsets: ['vietnamese', 'latin'],
-  variable: '--font-noto-serif',
-  display: 'swap',
+const Footer = dynamic(() => import('@/components/layout/Footer'), {
+  ssr: false,
+  loading: () => <div className="h-64 bg-gray-100"></div>
 });
+
+const AuthProvider = dynamic(
+  () => import('@/contexts/AuthContext').then(mod => mod.AuthProvider),
+  { ssr: false }
+);
+
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <Spin size="large" />
+  </div>
+);
 
 // Metadata is now in metadata.ts
 
@@ -33,7 +40,7 @@ export default function RootLayout({
   return (
     <html 
       lang="vi" 
-      className={`${roboto.variable} ${notoSerif.variable} scroll-smooth`}
+      className="scroll-smooth"
       suppressHydrationWarning
     >
       <head>
@@ -42,28 +49,30 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-white text-gray-900 antialiased font-sans">
         <StyleProvider hashPriority="high">
-          <ConfigProvider
-            theme={antdTheme}
-            componentSize="middle"
-            getPopupContainer={node => {
-              if (node) {
-                return node.parentElement || document.body;
-              }
-              return document.body;
-            }}
-          >
-            <AntdApp>
+          <MessageProvider>
+            <ConfigProvider
+              theme={antdTheme}
+              componentSize="middle"
+              getPopupContainer={node => {
+                if (node) {
+                  return node.parentElement || document.body;
+                }
+                return document.body;
+              }}
+            >
               <AuthProvider>
-                <div className="min-h-screen flex flex-col">
-            <Header />
-            <main className="flex-grow">
-              {children}
-            </main>
-            <Footer />
+                <div className="flex flex-col min-h-screen">
+                  <Header />
+                  <main className="flex-grow">
+                    <Suspense fallback={<LoadingFallback />}>
+                      {children}
+                    </Suspense>
+                  </main>
+                  <Footer />
                 </div>
               </AuthProvider>
-            </AntdApp>
-          </ConfigProvider>
+            </ConfigProvider>
+          </MessageProvider>
         </StyleProvider>
       </body>
     </html>

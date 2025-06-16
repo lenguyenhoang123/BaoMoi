@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bao-moi/shared/*": ["./shared/*"],
+      "@auth/*": ["./services/auth-service/src/*"],
+      "@posts/*": ["./services/posts-service/src/*"],
+      "@categories/*": ["./services/categories-service/src/*"]
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./shared/types"
+    ]
+  },
+  "references": [
+    { "path": "./shared/tsconfig.json" }
+  ]
+}

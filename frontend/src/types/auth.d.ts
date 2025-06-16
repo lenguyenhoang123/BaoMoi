@@ -1,6 +1,54 @@
-// Định nghĩa kiểu dữ liệu cho xác thực người dùng
+// Type definitions for authentication
+// Project: BaoMoi Frontend
+
+import { DefaultSession, DefaultUser } from 'next-auth';
+import { JWT } from 'next-auth/jwt';
+
+declare module 'next-auth' {
+  /**
+   * Extend the built-in session types
+   */
+  interface Session {
+    user: {
+      id: string;
+      role?: string;
+      accessToken?: string;
+      refreshToken?: string;
+    } & DefaultSession['user'];
+  }
+
+  /**
+   * Extend the built-in user type
+   */
+  interface User extends DefaultUser {
+    id: string;
+    email: string;
+    name?: string | null;
+    image?: string | null;
+    role?: string;
+    accessToken?: string;
+    refreshToken?: string;
+  }
+}
+
+declare module 'next-auth/jwt' {
+  /**
+   * Extend the built-in JWT type
+   */
+  interface JWT {
+    id: string;
+    email: string;
+    name?: string | null;
+    role?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    accessTokenExpires?: number;
+  }
+}
+
+// Application-specific authentication types
 declare namespace Auth {
-  // Thông tin người dùng
+  // User information
   interface User {
     id: string;
     email: string;
@@ -8,50 +56,52 @@ declare namespace Auth {
     name?: string;
     avatar?: string;
     role?: string;
-    [key: string]: any; // Cho phép thêm các trường khác nếu cần
+    accessToken?: string;
+    refreshToken?: string;
+    [key: string]: any;
   }
 
-  // Thông tin đăng nhập
+  // Login credentials
   interface Credentials {
     username: string;
     password: string;
     rememberMe?: boolean;
   }
 
-  // Dữ liệu đăng ký
+  // Registration data
   interface RegisterData {
     email: string;
     password: string;
-    confirmPassword?: string; // Chỉ cần thiết ở phía frontend
-    full_name: string; // Tên đầy đủ của người dùng
-    otp?: string; // Mã OTP xác thực (tùy chọn)
-    [key: string]: any; // Cho phép thêm các trường khác nếu cần
+    confirmPassword?: string;
+    full_name: string;
+    otp?: string;
+    [key: string]: any;
   }
 
-  // Phản hồi từ API
+  // API response
   interface ApiResponse<T = any> {
     success: boolean;
     message?: string;
     data?: T;
     token?: string;
     user?: User;
-    chiTiet?: string; // Thông tin chi tiết (thường dùng trong response tiếng Việt)
+    chiTiet?: string;
     errors?: Record<string, string[]>;
-    requiresVerification?: boolean; // Có cần xác thực OTP không
-    [key: string]: any; // Cho phép thêm các trường khác
+    requiresVerification?: boolean;
+    [key: string]: any;
   }
 
-  // Phản hồi đăng ký
+  // Register response
   interface RegisterResponse extends ApiResponse {
-    requiresVerification: boolean; // Có cần xác thực OTP không
+    requiresVerification: boolean;
     user?: User;
     token?: string;
   }
 
-  // Phản hồi đăng nhập
-  interface LoginResponse extends ApiResponse {
-    thanhCong?: boolean; // Trạng thái thành công (tiếng Việt)
-    chiTiet?: string;    // Thông tin chi tiết (tiếng Việt)
+  // Login response
+  interface LoginResponse {
+    success: boolean;
+    message?: string;
     user?: User;
     token?: string;
     data?: {
@@ -59,21 +109,48 @@ declare namespace Auth {
       token?: string;
       [key: string]: any;
     };
-    [key: string]: any; // Cho phép thêm các trường khác
+    chiTiet?: string;
+    requiresVerification?: boolean;
   }
 
-  // Phản hồi thông tin người dùng
-  interface ProfileResponse extends ApiResponse {
+  // User profile response
+  interface ProfileResponse {
+    success: boolean;
     data?: {
       user: User;
     };
+    message?: string;
+  }
+
+  // Password reset request
+  interface PasswordResetRequest {
+    email: string;
+  }
+
+  // Password reset confirmation
+  interface PasswordResetConfirm {
+    token: string;
+    password: string;
+    confirmPassword: string;
   }
 }
 
 export type { Auth };
 
-// Định nghĩa global để có thể sử dụng ở mọi nơi
+// Global type definitions
 declare global {
+  // Extend the global Window interface
+  interface Window {
+    // Add any global window properties here if needed
+  }
+
+  // Extend the global JSX namespace
+  namespace JSX {
+    interface IntrinsicElements {
+      [elemName: string]: any;
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace React {
     interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {

@@ -2,9 +2,20 @@
   "name": "bao-moi-backend",
   "version": "1.0.0",
   "description": "Backend services for Bao Moi application",
-  "main": "index.js",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "shared",
+      "services/*"
+    ],
+    "nohoist": [
+      "**/winston",
+      "**/winston/**"
+    ]
+  },
   "scripts": {
-    "install-all": "npm install && cd services/api-gateway && npm install && cd ../auth-service && npm install && cd ../categories-service && npm install && cd ../comments-service && npm install && cd ../posts-service && npm install && cd ../tags-service && npm install",
+    "build": "npm run build --workspaces",
+    "install-all": "npm install",
     "start": "concurrently \"npm run start:gateway\" \"npm run start:auth\" \"npm run start:categories\" \"npm run start:comments\" \"npm run start:posts\" \"npm run start:tags\" --names GATEWAY,AUTH,CATEGORIES,COMMENTS,POSTS,TAGS --prefix-colors white,white,black,white,black,white --prefix \"[{name}]\" --timestamp-format \"HH:mm:ss\"",
     "start:gateway": "cd services/api-gateway && npm run dev",
     "start:auth": "cd services/auth-service && npm run dev",
@@ -23,9 +34,17 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/jest": "^29.5.14",
+    "@types/node": "^24.0.1",
+    "@types/pg": "^8.15.4",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.0.0"
   },
   "dependencies": {
-    "winston": "^3.11.0"
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.0"
   }
 }

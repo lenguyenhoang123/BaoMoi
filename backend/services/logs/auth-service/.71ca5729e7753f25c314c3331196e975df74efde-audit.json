@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "D:\\Vietprodev\\BaoMoi\\backend\\services\\logs\\auth-service\\.71ca5729e7753f25c314c3331196e975df74efde-audit.json",
+    "files": [
+        {
+            "date": 1750044443735,
+            "name": "D:\\Vietprodev\\BaoMoi\\backend\\services\\logs\\auth-service\\combined-2025-06-16.log",
+            "hash": "3c20d23e03967dbb2b6fdd95796416d2977fc4fa1e2ca25bddfc1e1c9c6fd33a"
+        }
+    ],
+    "hashType": "sha256"
+}

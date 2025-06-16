@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\logs\\combined\\.401e25d102acc4aa9d82a125639feda0977ec123-audit.json",
+    "files": [
+        {
+            "date": 1748624875440,
+            "name": "D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\logs\\combined\\combined-2025-05-31.log",
+            "hash": "531cb27c082716c03cebb0b0fb56229b16381a7807f9b5da2c546c7e74eabb06"
+        },
+        {
+            "date": 1748711292188,
+            "name": "D:\\HocVietDepPro\\new\\bao-moi-react\\backend\\services\\comments-service\\logs\\combined\\combined-2025-06-01.log",
+            "hash": "06d53f6863c648d11d79c453c7aa3710222d0baa61eb72d68383387764bbf45e"
+        }
+    ],
+    "hashType": "sha256"
+}

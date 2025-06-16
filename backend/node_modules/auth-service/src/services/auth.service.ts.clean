@@ -1,0 +1,856 @@
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { Request, Response, NextFunction } from 'express';
+import { User } from '../models/user.model';
+import { IRegisterRequest } from '../interfaces/auth.interface';
+import { logger } from '../utils/logger';
+import { sendVerificationEmail } from './email.service';
+import { authConfig } from '../config/auth.config';
+import { Op } from 'sequelize';
+import crypto from 'crypto';
+
+export interface ITokenPayload {
+  id: string; 
+  email: string;
+  role: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: ITokenPayload;
+    }
+  }
+}
+
+interface IAuthService {
+  register(userData: IRegisterRequest): Promise<{ user: User; requiresVerification: boolean }>;
+  login(email: string, password: string): Promise<{ user: User; token: string }>;
+  verifyEmail(email: string, otp: string): Promise<{ user: User; token: string }>;
+  resendOtp(email: string): Promise<void>;
+  generateToken(user: User): string;
+  isAdmin(req: Request, res: Response, next: NextFunction): void;
+  changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean>;
+  resetPassword(token: string, newPassword: string): Promise<void>;
+  forgotPassword(email: string): Promise<void>;
+  resendVerificationEmail(email: string): Promise<boolean>;
+}
+
+class AuthService implements IAuthService {
+  /**
+   * Middleware kiểm tra quyền admin
+   */
+  public isAdmin(req: Request, res: Response, next: NextFunction): void {
+    if (req.user && req.user.role === 'admin') {
+      next();
+    } else {
+      res.status(403).json({ message: 'Không có quyền truy cập' });
+    }
+  }
+
+  /**
+   * Đăng ký tài khoản mới
+   */
+  public async register(userData: IRegisterRequest): Promise<{ user: User; requiresVerification: boolean }> {
+    try {
+      console.log('🔵 [AUTH SERVICE] Bắt đầu đăng ký người dùng mới:', JSON.stringify(userData, null, 2));
+      
+      // Kiểm tra email đã tồn tại chưa
+      const existingUser = await User.findOne({
+        where: { email: userData.email }
+      });
+      
+      console.log('🟠 [AUTH SERVICE] Kiểm tra email tồn tại:', existingUser ? 'Đã tồn tại' : 'Chưa tồn tại');
+
+      if (existingUser) {
+        throw new Error('Email đã được sử dụng');
+      }
+
+      // Kiểm tra định dạng email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userData.email)) {
+        throw new Error('Định dạng email không hợp lệ');
+      }
+
+      // Kiểm tra độ mạnh mật khẩu
+      if (userData.password.length < 6) {
+        throw new Error('Mật khẩu phải có ít nhất 6 ký tự');
+      }
+
+      // Mã hóa mật khẩu
+      const salt = await bcrypt.genSalt(authConfig.bcrypt.saltRounds);
+      const hashedPassword = await bcrypt.hash(userData.password, salt);
+
+      // Tạo mã OTP 6 chữ số
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const emailVerificationExpires = new Date();
+      emailVerificationExpires.setMinutes(emailVerificationExpires.getMinutes() + 15); // 15 phút hết hạn
+
+      // Tạo user mới với tất cả các trường bắt buộc
+      const newUser = await User.create({
+        email: userData.email,
+        password: hashedPassword,
+        full_name: userData.full_name || userData.email.split('@')[0],
+        role: 'user',
+        is_active: false, // Tạm thời vô hiệu hóa đến khi xác thực OTP
+        email_verified: false,
+        email_verification_token: otp,
+        email_verification_expires: emailVerificationExpires,
+        login_attempts: 0,
+        lock_until: null,
+        phone: userData.phone || null,
+        reset_password_token: null,
+        reset_password_expires: null
+      });
+
+      console.log('🟢 [AUTH SERVICE] Đã tạo người dùng mới:', newUser.id);
+
+      try {
+        // Gửi email chứa mã OTP
+        await sendVerificationEmail(
+          newUser.email,
+          newUser.full_name || newUser.email.split('@')[0],
+          otp
+        );
+        console.log('✅ [AUTH SERVICE] Đã gửi mã OTP đến email:', newUser.email);
+      } catch (emailError) {
+        console.error('❌ [AUTH SERVICE] Lỗi khi gửi email OTP:', emailError);
+        // Vẫn trả về thành công nhưng ghi log lỗi gửi email
+      }
+      
+      return {
+        user: newUser,
+        requiresVerification: true
+      };
+    } catch (error) {
+      logger.error('Lỗi khi đăng ký người dùng:', error);
+      throw error;
+    }
+  }
+
+
+  /**
+   * Xác thực email bằng mã OTP
+   */
+  public async verifyEmail(email: string, otp: string): Promise<{ user: User; token: string }> {
+    try {
+      console.log(`🔵 [AUTH SERVICE] Bắt đầu xác thực OTP cho email: ${email}`);
+      
+      // Tìm người dùng với email và mã OTP hợp lệ
+      const user = await User.findOne({ 
+        where: { 
+          email,
+          email_verification_token: otp,
+          email_verification_expires: { [Op.gt]: new Date() }
+        } 
+      });
+      
+      if (!user) {
+        console.log('🔴 [AUTH SERVICE] Xác thực OTP thất bại: Mã OTP không hợp lệ hoặc đã hết hạn');
+        throw new Error('Mã OTP không hợp lệ hoặc đã hết hạn. Vui lòng thử lại hoặc yêu cầu gửi lại mã mới.');
+      }
+
+      console.log(`✅ [AUTH SERVICE] Xác thực OTP thành công cho user: ${user.id}`);
+
+      // Cập nhật trạng thái xác thực và kích hoạt tài khoản
+      await user.update({
+        email_verified: true,
+        is_active: true,
+        email_verification_token: null,
+        email_verification_expires: null,
+        verified_at: new Date()
+      });
+
+      // Tạo token sau khi xác thực thành công
+      const token = this.generateToken(user);
+      
+      console.log(`✅ [AUTH SERVICE] Đã kích hoạt tài khoản và tạo token cho user: ${user.id}`);
+      
+      return { 
+        user: user.get({ plain: true }) as User, 
+        token 
+      };
+    } catch (error) {
+      logger.error('Lỗi khi xác thực email:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gửi lại mã OTP cho người dùng
+   * @param email Email của người dùng cần gửi lại OTP
+   * @throws {Error} Nếu có lỗi xảy ra khi gửi lại OTP
+   */
+  public async resendOtp(email: string): Promise<void> {
+    try {
+      logger.info(`[AUTH SERVICE] Yêu cầu gửi lại OTP cho email: ${email}`);
+      
+      // Tìm người dùng chưa xác thực email
+      const user = await User.findOne({ 
+        where: { 
+          email,
+          email_verified: false
+        } 
+      });
+      
+      if (!user) {
+        const errorMsg = `Không tìm thấy tài khoản chưa xác thực với email: ${email}`;
+        logger.warn(`[AUTH SERVICE] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      // Kiểm tra thời gian chờ giữa các lần gửi lại OTP
+      const now = new Date();
+      if (user.email_verification_expires && user.email_verification_expires > now) {
+        const remainingTime = Math.ceil((user.email_verification_expires.getTime() - now.getTime()) / 1000 / 60);
+        const errorMsg = `Vui lòng đợi ${remainingTime} phút trước khi yêu cầu mã mới`;
+        logger.warn(`[AUTH SERVICE] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      // Tạo mã OTP mới
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const emailVerificationExpires = new Date();
+      emailVerificationExpires.setMinutes(emailVerificationExpires.getMinutes() + 15); // 15 phút hết hạn
+
+      logger.info(`[AUTH SERVICE] Tạo mã OTP mới cho user: ${user.id}`);
+
+      // Cập nhật mã OTP mới
+      await user.update({
+        email_verification_token: otp,
+        email_verification_expires: emailVerificationExpires
+      });
+
+      try {
+        // Gửi email chứa mã OTP mới
+        await sendVerificationEmail(
+          user.email,
+          user.full_name || user.email.split('@')[0],
+          otp
+        );
+        
+        logger.info(`[AUTH SERVICE] Đã gửi lại mã OTP đến email: ${user.email}`);
+      } catch (emailError) {
+        const errorMsg = 'Có lỗi xảy ra khi gửi mã OTP. Vui lòng thử lại sau.';
+        logger.error(`[AUTH SERVICE] ${errorMsg}`, emailError);
+        throw new Error(errorMsg);
+      }
+    } catch (error) {
+      logger.error('[AUTH SERVICE] Lỗi khi gửi lại mã OTP:', error);
+      throw error instanceof Error ? error : new Error('Có lỗi xảy ra khi xử lý yêu cầu gửi lại OTP');
+    }
+  }
+
+
+  /**
+   * Đăng nhập
+   */
+  public async login(email: string, password: string): Promise<{ user: User; token: string }> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+
+      if (!user) {
+        throw new Error('Email hoặc mật khẩu không chính xác');
+      }
+
+      // Kiểm tra tài khoản bị khóa
+      if (user.lock_until && user.lock_until > new Date()) {
+        throw new Error('Tài khoản của bạn đã bị khóa tạm thời. Vui lòng thử lại sau 30 phút.');
+      }
+
+      // Xác thực mật khẩu
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        // Tăng số lần đăng nhập thất bại
+        const loginAttempts = (user.login_attempts || 0) + 1;
+        let lockUntil = null;
+        
+        // Nếu đăng nhập sai quá 5 lần, khóa tài khoản 30 phút
+        if (loginAttempts >= 5) {
+          lockUntil = new Date();
+          lockUntil.setMinutes(lockUntil.getMinutes() + 30);
+        }
+
+        await user.update({
+          login_attempts: loginAttempts,
+          lock_until: lockUntil
+        });
+
+        throw new Error(lockUntil 
+          ? 'Bạn đã nhập sai mật khẩu quá 5 lần. Tài khoản đã bị khóa trong 30 phút.'
+          : 'Sai mật khẩu');
+      }
+
+      // Reset số lần đăng nhập thất bại nếu đăng nhập thành công
+      if (user.login_attempts > 0 || user.lock_until) {
+        await user.update({
+          login_attempts: 0,
+          lock_until: null
+        });
+      }
+
+      // Tạo token
+      const token = this.generateToken(user);
+      
+      return { user, token };
+    } catch (error) {
+      logger.error('Lỗi khi đăng nhập:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Tạo JWT token cho người dùng
+   * @param user Đối tượng người dùng
+   * @returns Chuỗi JWT token
+   */
+  public generateToken(user: User): string {
+    try {
+      const payload: ITokenPayload = {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      };
+
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        throw new Error('Không tìm thấy khóa bí mật JWT');
+      }
+
+      return jwt.sign(payload, secret, {
+        expiresIn: authConfig.jwt.expiresIn
+      });
+    } catch (error) {
+      logger.error('[AUTH SERVICE] Lỗi khi tạo token:', error);
+      throw new Error('Có lỗi xảy ra khi tạo token đăng nhập');
+    }
+  }
+
+  /**
+   * Đăng xuất người dùng
+   * @param _token Token của người dùng (không sử dụng vì JWT là stateless)
+   */
+  public async logout(_token: string): Promise<boolean> {
+    // Với JWT, không cần làm gì đặc biệt khi đăng xuất
+    // Token sẽ vẫn hợp lệ cho đến khi hết hạn
+    // Frontend nên xóa token khỏi localStorage/sessionStorage
+    return true;
+  }
+
+  /**
+   * Làm mới access token bằng refresh token
+   * @param refreshToken Refresh token
+   */
+  public async refreshToken(refreshToken: string): Promise<{ token: string; refreshToken: string } | null> {
+    try {
+      if (!refreshToken) {
+        throw new Error('Refresh token là bắt buộc');
+      }
+
+      // Xác thực refresh token
+      const secret = process.env.JWT_SECRET || 'your-secret-key';
+      const decoded = jwt.verify(refreshToken, secret) as ITokenPayload;
+      
+      if (!decoded) {
+        throw new Error('Refresh token không hợp lệ');
+      }
+
+      // Tìm người dùng
+      const user = await User.findByPk(decoded.id);
+      
+      if (!user) {
+        throw new Error('Người dùng không tồn tại');
+      }
+
+      // Tạo access token mới
+      const token = this.generateToken(user);
+      
+      // Tạo refresh token mới
+      const refreshTokenPayload: ITokenPayload = {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      };
+      
+      const refreshOptions: jwt.SignOptions = {
+        expiresIn: authConfig.jwt.refreshExpiresIn as any
+      };
+      
+      const newRefreshToken = jwt.sign(
+        refreshTokenPayload,
+        secret,
+        refreshOptions
+      );
+
+      return {
+        token,
+        refreshToken: newRefreshToken
+      };
+    } catch (error) {
+      logger.error('Lỗi khi làm mới token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Gửi lại email xác thực
+   * @param email Email của người dùng
+   */
+  public async resendVerificationEmail(email: string): Promise<boolean> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        logger.warn(`Yêu cầu gửi lại email xác thực cho email không tồn tại: ${email}`);
+        // Trả về true để không tiết lộ thông tin email có tồn tại hay không
+        return true;
+      }
+
+      // Kiểm tra xem email đã được xác thực chưa
+      if (user.email_verified) {
+        logger.warn(`Yêu cầu gửi lại email xác thực cho email đã xác thực: ${email}`);
+        return true;
+      }
+
+      // Tạo mã OTP mới (6 chữ số ngẫu nhiên)
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresIn = new Date();
+      expiresIn.setMinutes(expiresIn.getMinutes() + 30); // Hết hạn sau 30 phút
+
+      // Cập nhật mã OTP mới vào database
+      await user.update({
+        email_verification_token: otp,
+        email_verification_expires: expiresIn
+      });
+
+      // TODO: Gửi email xác thực với mã OTP mới
+      // await sendVerificationEmail(email, otp);
+      logger.info(`Mã xác thực mới đã được gửi đến ${email}: ${otp}`);
+
+      return true;
+    } catch (error) {
+      logger.error(`Lỗi khi gửi lại email xác thực: ${error}`);
+      throw new Error('Không thể gửi lại email xác thực. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Đổi mật khẩu người dùng
+   * @param userId ID của người dùng
+   * @param currentPassword Mật khẩu hiện tại
+   * @param newPassword Mật khẩu mới
+   */
+  public async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    try {
+      // Tìm người dùng bằng ID
+      const user = await User.findByPk(userId);
+      
+      if (!user) {
+        throw new Error('Người dùng không tồn tại');
+      }
+      
+      // Kiểm tra mật khẩu hiện tại
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      
+      if (!isPasswordValid) {
+        throw new Error('Mật khẩu hiện tại không chính xác');
+      }
+      
+      // Mã hóa mật khẩu mới
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      
+      // Cập nhật mật khẩu mới
+      user.password = hashedPassword;
+      await user.save();
+      
+      logger.info(`Đã đổi mật khẩu cho người dùng: ${user.email}`);
+      return true;
+    } catch (error) {
+      logger.error('Lỗi khi đổi mật khẩu:', error);
+      throw new Error('Không thể đổi mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Xử lý yêu cầu quên mật khẩu
+   * @param email Email của người dùng
+   */
+  public async forgotPassword(email: string): Promise<void> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        // Không thông báo lỗi để tránh lộ thông tin email có tồn tại hay không
+        logger.warn(`Yêu cầu đặt lại mật khẩu cho email không tồn tại: ${email}`);
+        return;
+      }
+
+      // Tạo mã đặt lại mật khẩu
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpires = new Date();
+      resetTokenExpires.setHours(resetTokenExpires.getHours() + 1); // Hết hạn sau 1 giờ
+
+      // Lưu mã đặt lại vào database
+      await user.update({
+        reset_password_token: resetToken,
+        reset_password_expires: resetTokenExpires
+      });
+
+      // TODO: Gửi email đặt lại mật khẩu
+      // await sendPasswordResetEmail(user.email, resetToken);
+      
+      logger.info(`Yêu cầu đặt lại mật khẩu đã được gửi đến ${email}`);
+    } catch (error) {
+      logger.error('Lỗi khi xử lý yêu cầu quên mật khẩu:', error);
+      throw new Error('Không thể xử lý yêu cầu quên mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Đặt lại mật khẩu mới
+   * @param token Token đặt lại mật khẩu
+   * @param newPassword Mật khẩu mới
+   */
+  public async resetPassword(token: string, newPassword: string): Promise<void> {
+    try {
+      // Tìm người dùng bằng token đặt lại mật khẩu
+      const user = await User.findOne({
+        where: {
+          reset_password_token: token,
+          reset_password_expires: { [Op.gt]: new Date() }
+        }
+      });
+
+      if (!user) {
+        throw new Error('Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+      }
+
+      // Kiểm tra độ mạnh mật khẩu mới
+      if (newPassword.length < 6) {
+        throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+      }
+
+      // Mã hóa mật khẩu mới
+      const salt = await bcrypt.genSalt(authConfig.bcrypt.saltRounds);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      // Cập nhật mật khẩu mới và xóa token đặt lại
+      await user.update({
+        password: hashedPassword,
+        reset_password_token: null,
+        reset_password_expires: null,
+        updated_at: new Date()
+      });
+
+      logger.info(`Đã đặt lại mật khẩu cho người dùng: ${user.email}`);
+    } catch (error) {
+      logger.error('Lỗi khi đặt lại mật khẩu:', error);
+      throw new Error('Không thể đặt lại mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Gửi lại email xác minh
+   * @param email Email cần gửi lại xác minh
+   */
+  public async resendVerificationEmail(email: string): Promise<boolean> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        throw new Error('Không tìm thấy người dùng với email này');
+      }
+
+      if (user.email_verified) {
+        throw new Error('Email đã được xác minh trước đó');
+      }
+
+      // Tạo mã OTP mới
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const emailVerificationExpires = new Date();
+      emailVerificationExpires.setMinutes(emailVerificationExpires.getMinutes() + 15); // 15 phút hết hạn
+
+      // Cập nhật thông tin xác minh
+      await user.update({
+        email_verification_token: otp,
+        email_verification_expires: emailVerificationExpires,
+        updated_at: new Date()
+      });
+
+      // Gửi email xác minh
+      await sendVerificationEmail(user.email, otp);
+      
+      logger.info(`Đã gửi lại email xác minh đến ${email}`);
+      return true;
+    } catch (error) {
+      logger.error('Lỗi khi gửi lại email xác minh:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Đổi mật khẩu người dùng
+   * @param userId ID của người dùng
+   * @param currentPassword Mật khẩu hiện tại
+   * @param newPassword Mật khẩu mới
+   * @returns Promise<boolean> Trả về true nếu đổi mật khẩu thành công
+   */
+  public async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    try {
+      // Tìm người dùng bằng ID
+      const user = await User.findByPk(userId);
+      
+      if (!user) {
+        throw new Error('Người dùng không tồn tại');
+      }
+      
+      // Kiểm tra mật khẩu hiện tại
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      
+      if (!isPasswordValid) {
+        throw new Error('Mật khẩu hiện tại không chính xác');
+      }
+      
+      // Kiểm tra mật khẩu mới có đủ mạnh không
+      if (newPassword.length < 6) {
+        throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+      }
+      
+      // Mã hóa mật khẩu mới
+      const salt = await bcrypt.genSalt(authConfig.bcrypt.saltRounds);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      
+      // Cập nhật mật khẩu mới
+      await user.update({
+        password: hashedPassword,
+        login_attempts: 0,  // Reset số lần đăng nhập thất bại
+        lock_until: null,  // Mở khóa tài khoản nếu bị khóa
+        updated_at: new Date()
+      });
+      
+      logger.info(`Đã đổi mật khẩu cho người dùng: ${user.email}`);
+      return true;
+    } catch (error) {
+      logger.error('Lỗi khi đổi mật khẩu:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Xử lý yêu cầu quên mật khẩu
+   * @param email Email của người dùng
+   */
+  public async forgotPassword(email: string): Promise<void> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        // Không thông báo lỗi để tránh lộ thông tin email có tồn tại hay không
+        logger.warn(`Yêu cầu đặt lại mật khẩu cho email không tồn tại: ${email}`);
+        return;
+      }
+
+      // Tạo mã đặt lại mật khẩu
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpires = new Date();
+      resetTokenExpires.setHours(resetTokenExpires.getHours() + 1); // Hết hạn sau 1 giờ
+
+      // Lưu mã đặt lại vào database
+      await user.update({
+        reset_password_token: resetToken,
+        reset_password_expires: resetTokenExpires
+      });
+
+      // TODO: Gửi email đặt lại mật khẩu
+      // await sendPasswordResetEmail(user.email, resetToken);
+      
+      logger.info(`Yêu cầu đặt lại mật khẩu đã được gửi đến ${email}`);
+    } catch (error) {
+      logger.error('Lỗi khi xử lý yêu cầu quên mật khẩu:', error);
+      throw new Error('Không thể xử lý yêu cầu quên mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Đặt lại mật khẩu mới
+   * @param token Token đặt lại mật khẩu
+   * @param newPassword Mật khẩu mới
+   */
+  public async resetPassword(token: string, newPassword: string): Promise<void> {
+    try {
+      // Tìm người dùng bằng token đặt lại mật khẩu
+      const user = await User.findOne({
+        where: {
+          reset_password_token: token,
+          reset_password_expires: { [Op.gt]: new Date() }
+        }
+      });
+
+      if (!user) {
+        throw new Error('Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+      }
+
+      // Kiểm tra độ mạnh mật khẩu mới
+      if (newPassword.length < 6) {
+        throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+      }
+
+      // Mã hóa mật khẩu mới
+      const salt = await bcrypt.genSalt(authConfig.bcrypt.saltRounds);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      // Cập nhật mật khẩu mới và xóa token đặt lại
+      await user.update({
+        password: hashedPassword,
+        reset_password_token: null,
+        reset_password_expires: null,
+        updated_at: new Date()
+      });
+
+      logger.info(`Đã đặt lại mật khẩu cho người dùng: ${user.email}`);
+    } catch (error) {
+      logger.error('Lỗi khi đặt lại mật khẩu:', error);
+      throw new Error('Không thể đặt lại mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Gửi lại email xác minh
+   * @param email Email cần gửi lại xác minh
+   */
+  public async resendVerificationEmail(email: string): Promise<boolean> {
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        throw new Error('Không tìm thấy người dùng với email này');
+      }
+
+      if (user.email_verified) {
+        throw new Error('Email đã được xác minh trước đó');
+      }
+
+      // Tạo mã OTP mới
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const emailVerificationExpires = new Date();
+      emailVerificationExpires.setMinutes(emailVerificationExpires.getMinutes() + 15); // 15 phút hết hạn
+
+      // Cập nhật thông tin xác minh
+      await user.update({
+        email_verification_token: otp,
+        email_verification_expires: emailVerificationExpires,
+        updated_at: new Date()
+      });
+
+      // Gửi email xác minh
+      await sendVerificationEmail(user.email, otp);
+      
+      logger.info(`Đã gửi lại email xác minh đến ${email}`);
+      return true;
+    } catch (error) {
+      logger.error('Lỗi khi gửi lại email xác minh:', error);
+      throw error;
+    }
+  }
+
+  // Phương thức changePassword đã được định nghĩa ở trên
+      if (newPassword.length < 6) {
+        throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự');
+      }
+      
+      // Mã hóa mật khẩu mới
+      const salt = await bcrypt.genSalt(authConfig.bcrypt.saltRounds);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      
+      // Cập nhật mật khẩu mới
+      await user.update({
+        password: hashedPassword,
+        updated_at: new Date()
+      });
+      
+      logger.info(`Đã đổi mật khẩu cho người dùng: ${user.email}`);
+      return true;
+    } catch (error) {
+      logger.error('Lỗi khi đổi mật khẩu:', error);
+      throw error;
+    }
+  }
+    try {
+      // Tìm người dùng bằng email
+      const user = await User.findOne({ where: { email } });
+      
+      if (!user) {
+        // Không trả về lỗi để tránh tiết lộ thông tin email có tồn tại hay không
+        logger.warn(`Yêu cầu đặt lại mật khẩu cho email không tồn tại: ${email}`);
+        return;
+      }
+
+      // Tạo mã đặt lại mật khẩu
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetTokenExpires = new Date();
+      resetTokenExpires.setHours(resetTokenExpires.getHours() + 1); // Hết hạn sau 1 giờ
+
+      // Lưu mã đặt lại vào database
+      await user.update({
+        reset_password_token: resetToken,
+        reset_password_expires: resetTokenExpires
+      });
+
+      // TODO: Gửi email đặt lại mật khẩu
+      // await sendPasswordResetEmail(email, resetToken);
+      
+      logger.info(`Yêu cầu đặt lại mật khẩu đã được gửi đến ${email}`);
+    } catch (error) {
+      logger.error('Lỗi khi xử lý yêu cầu quên mật khẩu:', error);
+      throw new Error('Không thể xử lý yêu cầu quên mật khẩu. Vui lòng thử lại sau.');
+    }
+  }
+
+  /**
+   * Đặt lại mật khẩu mới
+   * @param token Token đặt lại mật khẩu
+   * @param newPassword Mật khẩu mới
+   */
+  public async resetPassword(token: string, newPassword: string): Promise<void> {
+    // Tìm người dùng bằng token đặt lại mật khẩu
+    const user = await User.findOne({
+      where: {
+        reset_password_token: token,
+        reset_password_expires: { [Op.gt]: new Date() } // Kiểm tra token chưa hết hạn
+      }
+    });
+
+    if (!user) {
+      logger.warn('Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+      throw new Error('Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn');
+    }
+
+    // Kiểm tra mật khẩu mới có đủ mạnh không
+    if (newPassword.length < 8) {
+      throw new Error('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+
+    // Mã hóa mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Cập nhật mật khẩu mới và xóa token đặt lại
+    await user.update({
+      password: hashedPassword,
+      reset_password_token: null,
+      reset_password_expires: null,
+      updated_at: new Date()
+    });
+
+    logger.info(`Đã đặt lại mật khẩu cho người dùng: ${user.email}`);
+  }
+}
+
+export const authService = new AuthService();

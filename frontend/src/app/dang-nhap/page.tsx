@@ -54,27 +54,42 @@ export default function LoginPage() {
       });
       
       // Gọi hàm login với thông tin đăng nhập
-      await login({
+      const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
         rememberMe: formData.rememberMe
       });
       
-      // Nếu không có lỗi, coi như đăng nhập thành công
-      setSuccess('Đăng nhập thành công!');
-      setTimeout(() => {
-        setSuccess('');
-        router.push('/');
-      }, 1000);
+      if (result && result.success) {
+        // Hiển thị thông báo thành công
+        setSuccess('Đăng nhập thành công! Đang chuyển hướng...');
+        
+        // Chờ một chút để người dùng đọc được thông báo
+        setTimeout(() => {
+          // Chuyển hướng về trang chủ
+          router.push('/');
+          // Làm mới dữ liệu để đảm bảo header cập nhật
+          router.refresh();
+        }, 1500);
+      }
     } catch (err: any) {
       console.error('Login error:', err);
-      const errorMessage = err.response?.data?.message || 'Đã xảy ra lỗi khi đăng nhập';
+      const errorMessage = err.message || 'Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại.';
       setError(errorMessage);
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col justify-center py-12 sm:px-6 lg:px-8 transition-all duration-300">
+      {/* Success Message */}
+      {success && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+            <span className="block sm:inline">{success}</span>
+          </div>
+        </div>
+      )}
+      
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center transform hover:scale-105 transition-transform duration-300">
           <Link href="/" className="text-4xl font-extrabold bg-gradient-to-r from-red-600 to-red-800 bg-clip-text text-transparent mb-6 inline-block">

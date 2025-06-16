@@ -1,38 +1,81 @@
 {
   "compilerOptions": {
+    /* Base Options */
     "target": "es5",
     "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noEmit": true,
-    "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "incremental": true,
     "isolatedModules": true,
     "jsx": "preserve",
-    "incremental": true,
+    
+    /* Strict Type-Checking Options */
+    "strictNullChecks": true,
+    "noImplicitAny": false,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    
+    /* Module Resolution Options */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@styles/*": ["./src/styles/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@services/*": ["./src/services/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@contexts/*": ["./src/contexts/*"],
+      "@types/*": ["./src/types/*"],
+      "@public/*": ["./public/*"]
+    },
+    
+    /* Type Declaration Files */
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": [
+      "node",
+      "react",
+      "react-dom"
+    ],
+    
+    /* Plugin Configuration */
     "plugins": [
       {
         "name": "next"
       }
-    ],
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "typeRoots": [
-      "./node_modules/@types",
-      "./src/types"
-    ],
-    "types": ["node", "react"],
-    "allowSyntheticDefaultImports": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-    "baseUrl": "."
+    ]
   },
+  
+  "exclude": [
+    "node_modules",
+    ".next",
+    "out",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**/*",
+    "**/__mocks__/**/*",
+    "**/*.backup.tsx",
+    "**/*.old.tsx",
+    "**/*.backup.ts",
+    "**/*.old.ts"
+  ],
+  
   "include": [
     "next-env.d.ts",
     "**/*.ts",
@@ -41,11 +84,7 @@
     "**/*.jsx",
     "next.config.js",
     ".next/types/**/*.ts",
-    "src/types/**/*.d.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    ".next",
-    "out"
+    "src/types/**/*.d.ts",
+    "src/**/*.d.ts"
   ]
 }

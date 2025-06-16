@@ -2,25 +2,37 @@ import api from './api';
 
 /**
  * Thông tin đăng nhập
+ * @property {string} email - Địa chỉ email dùng để đăng nhập
+ * @property {string} password - Mật khẩu tài khoản
+ * @property {boolean} [rememberMe] - Có lưu đăng nhập hay không
  */
 export interface LoginCredentials {
-  email: string;         // Email đăng nhập
-  password: string;      // Mật khẩu
-  rememberMe?: boolean;  // Ghi nhớ đăng nhập
+  email: string;
+  password: string;
+  rememberMe?: boolean;
 }
 
 /**
  * Dữ liệu đăng ký tài khoản
+ * @property {string} email - Email dùng để đăng ký (bắt buộc)
+ * @property {string} password - Mật khẩu (tối thiểu 6 ký tự)
+ * @property {string} full_name - Họ và tên đầy đủ (bắt buộc)
+ * @property {string} [phone] - Số điện thoại di động (tùy chọn)
  */
 export interface RegisterData {
-  email: string;     // Email đăng ký (bắt buộc)
-  password: string;  // Mật khẩu (tối thiểu 6 ký tự)
-  full_name: string; // Họ và tên (bắt buộc)
-  phone?: string;    // Số điện thoại (tùy chọn)
+  email: string;
+  password: string;
+  full_name: string;
+  phone?: string;
 }
 
 /**
  * Thông tin người dùng
+ * @property {string} id - ID duy nhất của người dùng
+ * @property {string} email - Địa chỉ email
+ * @property {string} full_name - Họ và tên đầy đủ
+ * @property {string} [phone] - Số điện thoại
+ * @property {string} role - Vai trò người dùng (user, admin, editor,...)
  */
 export interface User {
   id: string;
@@ -35,20 +47,29 @@ export interface User {
 }
 
 /**
- * Phản hồi đăng nhập
+ * Phản hồi từ API khi đăng nhập
+ * @property {boolean} success - Trạng thái thực hiện
+ * @property {User} [data] - Thông tin người dùng (định dạng mới)
+ * @property {User} [user] - Thông tin người dùng (định dạng cũ)
+ * @property {string} token - Token xác thực
+ * @property {string} [message] - Thông báo từ server
  */
-interface LoginResponse {
+export interface LoginResponse {
   success: boolean;
-  data?: User;  // Dữ liệu người dùng từ API mới
-  user?: User;   // Dữ liệu người dùng từ API cũ (để tương thích ngược)
+  data?: User;
+  user?: User; // Để tương thích với cả hai định dạng API
   token: string;
   message?: string;
 }
 
 /**
- * Phản hồi đăng ký
+ * Phản hồi từ API khi đăng ký
+ * @property {boolean} success - Trạng thái thực hiện
+ * @property {User} user - Thông tin người dùng đã đăng ký
+ * @property {boolean} requiresVerification - Yêu cầu xác thực email không
+ * @property {string} [message] - Thông báo từ server
  */
-interface RegisterResponse {
+export interface RegisterResponse {
   success: boolean;
   user: User;
   requiresVerification: boolean;

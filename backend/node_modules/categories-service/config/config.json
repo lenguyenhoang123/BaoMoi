@@ -1,0 +1,44 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "123",
+    "database": "categories_db",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres",
+    "logging": false,
+    "define": {
+      "underscored": true,
+      "timestamps": true,
+      "paranoid": true
+    },
+    "dialectOptions": {
+      "useUTC": false
+    },
+    "timezone": "+07:00"
+  },
+  "test": {
+    "username": "postgres",
+    "password": "postgres",
+    "database": "categories_db_test",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres",
+    "logging": false
+  },
+  "production": {
+    "username": "postgres",
+    "password": "postgres",
+    "database": "categories_db_prod",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres",
+    "logging": false,
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": false
+      }
+    }
+  }
+}

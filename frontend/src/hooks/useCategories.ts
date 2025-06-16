@@ -1,181 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Category, CreateCategoryData, UpdateCategoryData } from '../types';
+import * as categoryService from '../services/categories';
 
-// Static categories data
-const staticCategories: Category[] = [
-  { 
-    id: '1', 
-    name: 'Thời sự', 
-    slug: 'thoi-su', 
-    description: 'Tin tức thời sự trong nước và quốc tế',
-    isActive: true,
-    order: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '2', 
-    name: 'Thế giới', 
-    slug: 'the-gioi', 
-    description: 'Tin tức quốc tế',
-    isActive: true,
-    order: 2,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '3', 
-    name: 'Kinh doanh', 
-    slug: 'kinh-doanh', 
-    description: 'Tin tức kinh tế, tài chính',
-    isActive: true,
-    order: 3,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '4', 
-    name: 'Giải trí', 
-    slug: 'giai-tri', 
-    description: 'Tin tức giải trí, điện ảnh, âm nhạc',
-    isActive: true,
-    order: 4,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '5', 
-    name: 'Thể thao', 
-    slug: 'the-thao', 
-    description: 'Tin tức thể thao trong nước và quốc tế',
-    isActive: true,
-    order: 5,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '6', 
-    name: 'Pháp luật', 
-    slug: 'phap-luat', 
-    description: 'Tin tức pháp luật, an ninh',
-    isActive: true,
-    order: 6,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '7', 
-    name: 'Giáo dục', 
-    slug: 'giao-duc', 
-    description: 'Tin tức giáo dục, tuyển sinh',
-    isActive: true,
-    order: 7,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '8', 
-    name: 'Sức khỏe', 
-    slug: 'suc-khoe', 
-    description: 'Tin tức sức khỏe, làm đẹp',
-    isActive: true,
-    order: 8,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '9', 
-    name: 'Du lịch', 
-    slug: 'du-lich', 
-    description: 'Tin tức du lịch, khám phá',
-    isActive: true,
-    order: 9,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '10', 
-    name: 'Khoa học', 
-    slug: 'khoa-hoc', 
-    description: 'Tin tức khoa học, công nghệ',
-    isActive: true,
-    order: 10,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '11', 
-    name: 'Số hóa', 
-    slug: 'so-hoa', 
-    description: 'Tin tức công nghệ số',
-    isActive: true,
-    order: 11,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '12', 
-    name: 'Xe', 
-    slug: 'xe', 
-    description: 'Tin tức ô tô, xe máy',
-    isActive: true,
-    order: 12,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '13', 
-    name: 'Ý kiến', 
-    slug: 'y-kien', 
-    description: 'Ý kiến độc giả',
-    isActive: true,
-    order: 13,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '14', 
-    name: 'Tâm sự', 
-    slug: 'tam-su', 
-    description: 'Chia sẻ tâm sự',
-    isActive: true,
-    order: 14,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  { 
-    id: '15', 
-    name: 'Cười', 
-    slug: 'cuoi', 
-    description: 'Tin tức giải trí, hài hước',
-    isActive: true,
-    order: 15,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
+/**
+ * Hook quản lý danh mục
+ * Cung cấp các phương thức CRUD cho danh mục và quản lý trạng thái
+ * @returns {Object} Đối tượng chứa danh sách danh mục và các phương thức liên quan
+ */
 
+/**
+ * Hook quản lý danh mục
+ * @returns {Object} Đối tượng chứa:
+ * - categories: Danh sách danh mục
+ * - loading: Trạng thái đang tải
+ * - error: Thông báo lỗi (nếu có)
+ * - fetchCategories: Làm mới danh sách danh mục
+ * - getCategory: Lấy thông tin chi tiết một danh mục
+ * - createCategory: Tạo mới danh mục
+ * - updateCategory: Cập nhật thông tin danh mục
+ * - deleteCategory: Xóa danh mục
+ */
 export const useCategories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       setLoading(true);
-      // Use static data instead of API call
-      setCategories(staticCategories);
+      const data = await categoryService.getCategories();
+      setCategories(data);
     } catch (err: any) {
+      console.error('Error fetching categories:', err);
       setError(err.message || 'Lấy danh sách danh mục thất bại');
+      setCategories([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const getCategory = async (slug: string) => {
+  const getCategory = useCallback(async (slug: string) => {
     try {
-      // Find category by slug in static data
-      const category = staticCategories.find(cat => cat.slug === slug);
+      const categories = await categoryService.getCategories();
+      const category = Array.isArray(categories) 
+        ? categories.find(cat => cat.slug === slug)
+        : categories.data?.find((cat: any) => cat.slug === slug);
+      
       if (!category) {
         throw new Error('Không tìm thấy danh mục');
       }
@@ -184,13 +54,13 @@ export const useCategories = () => {
       setError(err.message || 'Lấy danh mục thất bại');
       throw err;
     }
-  };
+  }, []);
 
   const createCategory = async (data: CreateCategoryData) => {
     try {
       const category = await categoryService.createCategory(data);
-      setCategories([...categories, category]);
-      return category;
+      setCategories(prev => [...prev, category.data || category]);
+      return category.data || category;
     } catch (err: any) {
       setError(err.message || 'Tạo danh mục thất bại');
       throw err;
@@ -200,8 +70,8 @@ export const useCategories = () => {
   const updateCategory = async (id: string, data: UpdateCategoryData) => {
     try {
       const category = await categoryService.updateCategory(id, data);
-      setCategories(categories.map(c => c.id === id ? category : c));
-      return category;
+      setCategories(prev => prev.map(c => c.id === id ? (category.data || category) : c));
+      return category.data || category;
     } catch (err: any) {
       setError(err.message || 'Cập nhật danh mục thất bại');
       throw err;
@@ -211,7 +81,8 @@ export const useCategories = () => {
   const deleteCategory = async (id: string) => {
     try {
       await categoryService.deleteCategory(id);
-      setCategories(categories.filter(c => c.id !== id));
+      setCategories(prev => prev.filter(c => c.id !== id));
+      return { success: true };
     } catch (err: any) {
       setError(err.message || 'Xóa danh mục thất bại');
       throw err;

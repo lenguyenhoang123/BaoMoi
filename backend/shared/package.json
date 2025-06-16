@@ -1,0 +1,30 @@
+{
+  "name": "@bao-moi/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared utilities and configurations for Bao Moi backend services",
+  "main": "dist/index.js",
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rimraf dist",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "winston": "^3.8.2",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.1",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "src/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

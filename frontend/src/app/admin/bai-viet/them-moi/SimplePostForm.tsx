@@ -1,148 +1,114 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Form, Input, Button, Card, Select, message } from 'antd';
+import api from '@/services/api';
 import { SaveOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import TipTapEditor from '@/components/editor/TipTapEditor';
-import axios from 'axios';
+// Using native fetch API instead of axios
 
 const { TextArea } = Input;
 
-interface Category {
-  id: string;
-  name: string;
-  slug?: string;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface Tag {
-  id: string;
-  name: string;
-  slug?: string;
-  description?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
 interface PostData {
+  id?: string;
   title: string;
-  excerpt: string;
+  slug: string;
   content: string;
-  categoryId: string;
-  status: 'draft' | 'published';
+  excerpt?: string;
+  status: 'draft' | 'published' | 'archived';
   tags?: string[];
+  image_url?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function SimplePostForm() {
   const [form] = Form.useForm();
   const router = useRouter();
   const [content, setContent] = useState('');
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [tagsLoading, setTagsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Lấy danh sách danh mục
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get('/api/categories', {
-          withCredentials: true
-        });
-        
-        console.log('Categories API response:', response.data); // Log dữ liệu trả về
-        
-        let categoriesData: Category[] = [];
-        
-        if (Array.isArray(response.data)) {
-          categoriesData = response.data;
-        } else if (response.data?.data && Array.isArray(response.data.data)) {
-          categoriesData = response.data.data;
-        } else if (response.data?.results && Array.isArray(response.data.results)) {
-          categoriesData = response.data.results;
-        }
-        
-        console.log('Processed categories:', categoriesData);
-        setCategories(categoriesData);
-      } catch (error) {
-        console.error('Error fetching categories:', error);
-        message.error('Không thể tải danh mục');
-      } finally {
-        setLoading(false);
-      }
-    };
+  // Tự động tạo slug từ tiêu đề khi chưa chỉnh sửa slug
+  const [isSlugTouched, setIsSlugTouched] = useState(false);
+  
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const title = e.target.value;
+    if (!isSlugTouched) {
+      const slug = title
+        .toLowerCase()
+        .normalize('NFD') // Chuyển đổi ký tự có dấu thành không dấu
+        .replace(/[^\w\s-]/g, '') // Xóa các ký tự đặc biệt
+        .replace(/\s+/g, '-') // Thay thế khoảng trắng bằng dấu gạch ngang
+        .replace(/--+/g, '-') // Thay thế nhiều dấu gạch ngang liên tiếp bằng một dấu
+        .replace(/^-+|-+$/g, '') // Xóa dấu gạch ngang ở đầu và cuối
+        .trim();
+      form.setFieldsValue({ slug });
+    }
+  };
 
-    const fetchTags = async () => {
-      try {
-        setTagsLoading(true);
-        const response = await axios.get('/api/tags', {
-          withCredentials: true
-        });
-        
-        let tagsData: Tag[] = [];
-        
-        if (Array.isArray(response.data)) {
-          tagsData = response.data;
-        } else if (response.data?.data && Array.isArray(response.data.data)) {
-          tagsData = response.data.data;
-        } else if (response.data?.results && Array.isArray(response.data.results)) {
-          tagsData = response.data.results;
-        }
-        
-        setTags(tagsData);
-      } catch (error) {
-        console.error('Error fetching tags:', error);
-        message.error('Không thể tải danh sách thẻ');
-      } finally {
-        setTagsLoading(false);
-      }
-    };
-
-    fetchCategories();
-    fetchTags();
-  }, []);
 
   // Xử lý gửi form
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: PostData) => {
     try {
       setSubmitting(true);
-      
-      const postData: PostData = {
-        title: values.title,
-        excerpt: values.excerpt,
+
+      // Validate content
+      if (!content || content.trim() === '' || content === '<p></p>') {
+        throw new Error('Vui lòng nhập nội dung bài viết');
+      }
+
+      // Validate các trường bắt buộc
+      const requiredFields = ['title', 'slug'];
+      const missingFields = requiredFields.filter(field => !values[field as keyof typeof values]);
+
+      if (missingFields.length > 0) {
+        throw new Error(`Vui lòng điền đầy đủ thông tin: ${missingFields.join(', ')}`);
+      }
+
+      // Chuẩn bị dữ liệu gửi lên
+      const postData = {
+        title: values.title.trim(),
+        slug: values.slug.trim().toLowerCase(),
         content: content,
-        categoryId: values.categoryId,
         status: values.status || 'draft',
-        tags: values.tags || []
+        image_url: values.image_url?.trim() || null,
+        excerpt: values.excerpt?.trim() || '',
+        tags: values.tags
+          ? String(values.tags).split(',').map(tag => tag.trim()).filter(Boolean)
+          : []
       };
 
-      await axios.post('/api/posts', postData, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      message.success('Thêm bài viết thành công');
+      // Sử dụng api service đã được cấu hình
+      const response = await api.post('/posts', postData);
+      const responseData = response.data;
+
+      message.success('Tạo bài viết thành công');
       router.push('/admin/bai-viet');
-    } catch (error: any) {
-      console.error('Error creating post:', error);
-      message.error(error.response?.data?.message || 'Có lỗi xảy ra khi thêm bài viết');
+    } catch (error) {
+      console.error('Lỗi khi tạo bài viết:', error);
+      message.error(error instanceof Error ? error.message : 'Có lỗi xảy ra khi tạo bài viết');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Giá trị mặc định cho form
+  const initialValues = {
+    status: 'draft',
+    tags: '',
+    excerpt: '',
+    title: '',
+    slug: '',
+    image_url: ''
   };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Thêm bài viết mới</h1>
-        <Button 
-          icon={<ArrowLeftOutlined />} 
+        <Button
+          icon={<ArrowLeftOutlined />}
           onClick={() => router.back()}
         >
           Quay lại
@@ -151,24 +117,41 @@ export default function SimplePostForm() {
 
       <Form
         form={form}
+        initialValues={initialValues}
         layout="vertical"
         onFinish={handleSubmit}
-        initialValues={{
-          status: 'draft'
-        }}
+        className="space-y-4"
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <Card>
               <Form.Item
+                label="Tiêu đề"
                 name="title"
-                label="Tiêu đề bài viết"
-                rules={[{ 
-                  required: true, 
-                  message: 'Vui lòng nhập tiêu đề' 
-                }]}
+                rules={[{ required: true, message: 'Vui lòng nhập tiêu đề bài viết' }]}
               >
-                <Input placeholder="Nhập tiêu đề bài viết" />
+                <Input
+                  placeholder="Nhập tiêu đề bài viết"
+                  onChange={handleTitleChange}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="Slug"
+                name="slug"
+                rules={[{ required: true, message: 'Vui lòng nhập slug cho bài viết' }]}
+              >
+                <Input 
+                  placeholder="duong-dan-bai-viet" 
+                  onChange={() => setIsSlugTouched(true)}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="Ảnh"
+                name="image_url"
+              >
+                <Input placeholder="https://example.com/image.jpg" />
               </Form.Item>
 
               <Form.Item
@@ -194,11 +177,12 @@ export default function SimplePostForm() {
                 rules={[{
                   required: true,
                   message: 'Vui lòng nhập nội dung bài viết',
-                  validator: (_, value) => 
+                  validator: (_, value) =>
                     content && content.trim() !== '' && content !== '<p></p>'
-                      ? Promise.resolve() 
+                      ? Promise.resolve()
                       : Promise.reject('Nội dung không được để trống')
                 }]}
+                className="mb-4"
               >
                 <TipTapEditor
                   value={content}
@@ -213,86 +197,36 @@ export default function SimplePostForm() {
             <Card title="Thông tin">
               <Form.Item
                 name="status"
-                label="Trạng thái"
-                rules={[{ required: true }]}
-              >
-                <Select>
-                  <Select.Option value="draft">Bản nháp</Select.Option>
-                  <Select.Option value="published">Công khai</Select.Option>
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="tags"
-                label="Thẻ (Tags)"
-              >
+                label="Trạng thái">
                 <Select
-                  mode="multiple"
-                  placeholder="Chọn thẻ"
-                  loading={tagsLoading}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    (option?.children?.toString().toLowerCase() || '').includes(input.toLowerCase())
-                  }
-                >
-                  {tags.map(tag => (
-                    <Select.Option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="categoryId"
-                label="Danh mục"
-                rules={[{ 
-                  required: true, 
-                  message: 'Vui lòng chọn danh mục' 
-                }]}
-              >
-                <Select
-                  placeholder="Chọn danh mục"
-                  loading={loading}
-                  showSearch
-                  optionFilterProp="children"
-                  filterOption={(input, option) =>
-                    (option?.children?.toString().toLowerCase() || '').includes(input.toLowerCase())
-                  }
-                >
-                  {categories.map(category => (
-                    <Select.Option key={category.id} value={category.id}>
-                      {category.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="tags"
-                label="Thẻ (Tags)"
-                tooltip="Nhấn Enter sau mỗi thẻ"
-              >
-                <Select
-                  mode="tags"
-                  style={{ width: '100%' }}
-                  placeholder="Thêm thẻ"
-                  tokenSeparators={[',']}
+                  placeholder="Chọn trạng thái"
+                  options={[
+                    { value: 'draft', label: 'Bản nháp' },
+                    { value: 'published', label: 'Công khai' },
+                    { value: 'archived', label: 'Lưu trữ' }
+                  ]}
                 />
+              </Form.Item>
+
+              <Form.Item
+                name="tags"
+                label="Thẻ (cách nhau bằng dấu phẩy)"
+                extra="Ví dụ: tin tức, thời sự, xã hội"
+              >
+                <Input placeholder="Nhập các thẻ, cách nhau bởi dấu phẩy" />
               </Form.Item>
             </Card>
 
             <div className="flex justify-end gap-4 mt-4">
-              <Button 
+              <Button
                 onClick={() => router.push('/admin/bai-viet')}
                 disabled={submitting}
               >
                 Hủy bỏ
               </Button>
-              <Button 
-                type="primary" 
-                htmlType="submit" 
+              <Button
+                type="primary"
+                htmlType="submit"
                 icon={<SaveOutlined />}
                 loading={submitting}
               >

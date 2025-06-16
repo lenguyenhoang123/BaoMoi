@@ -1,12 +1,48 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Calendar, Clock, ArrowRight } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { vi } from 'date-fns/locale';
-import newsService from '@/services/news';
-import { Post } from '../../types';
+import { useNewsList } from '@/hooks/useNews';
+import { Post as BasePost, PostStatus, Tag, Author, Category, Post } from '@/types/post';
 import { getImageUrl, getPostUrl } from '../../utils/url';
+
+// Extended Post type that includes all possible fields
+interface ExtendedPost extends Omit<BasePost, 'view_count'> {
+  // Field variations
+  featured_image?: string;
+  featuredImage?: string;
+  created_at?: string;
+  updated_at?: string;
+  published_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string;
+  
+  // SEO fields
+  meta_title?: string;
+  meta_description?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  
+  // Stats
+  viewCount?: number;
+  view_count?: number;
+  likeCount?: number;
+  like_count?: number;
+  commentCount?: number;
+  comment_count?: number;
+  readingTime?: number;
+  reading_time?: number;
+  
+  // Flags
+  isPublished?: boolean;
+  isFeatured?: boolean;
+  
+  // Allow additional properties
+  [key: string]: any;
+}
 
 interface NewsFeedProps {
   category?: string;
@@ -14,54 +50,142 @@ interface NewsFeedProps {
 }
 
 const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
-  const [news, setNews] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { news, loading, error, hasMore, loadMore, refresh } = useNewsList({
+    page: 1,
+    category,
+    initialLoad: true
+  });
 
-  useEffect(() => {
-    const fetchNews = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        const params: Record<string, any> = { 
-          page: 1,
-          page_size: limit,
-          is_published: true
-        };
-        
-        if (category) {
-          params.categories = category;
-        }
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    try {
+      const date = parseISO(dateString);
+      return isValid(date)
+        ? format(date, 'dd/MM/yyyy HH:mm', { locale: vi })
+        : 'Ngày không hợp lệ';
+    } catch (error) {
+      console.error('Lỗi định dạng ngày tháng:', error);
+      return 'Ngày không xác định';
+    }
+  };
+  // Process news items to ensure they have required fields
+  const processedNews = React.useMemo(() => {
+    return news.map((item: ExtendedPost) => {
+      // Helper to get value with fallback for both snake_case and camelCase
+      const getValue = <T,>(obj: any, key: string, fallback: T): T => {
+        const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+        return obj[key] ?? obj[snakeKey] ?? fallback;
+      };
 
-        console.log('📡 [NewsFeed] Fetching news with params:', params);
-        const response = await newsService.getNews(params);
-        console.log('📥 [NewsFeed] Received response:', response);
-        
-        // Kiểm tra cấu trúc phản hồi
-        let newsItems = [];
-        if (Array.isArray(response)) {
-          newsItems = response; // Nếu response là mảng
-        } else if (response && response.results && Array.isArray(response.results)) {
-          newsItems = response.results; // Nếu response có thuộc tính results là mảng
-        } else if (response && response.data && Array.isArray(response.data)) {
-          newsItems = response.data; // Nếu response có thuộc tính data là mảng
-        } else if (response && response.data && response.data.results && Array.isArray(response.data.results)) {
-          newsItems = response.data.results; // Nếu response.data.results là mảng
+      // Process tags to ensure they match Tag interface
+      const processTags = (tags: any): Tag[] => {
+        if (!Array.isArray(tags)) return [];
+        return tags
+          .filter(tag => tag && (typeof tag === 'string' || (typeof tag === 'object' && tag.name)))
+          .map(tag => ({
+            id: typeof tag === 'object' ? String(tag.id || '') : '',
+            name: typeof tag === 'object' ? String(tag.name || '') : String(tag),
+            slug: typeof tag === 'object' ? String(tag.slug || '') : ''
+          }));
+      };
+
+      // Helper to get date with fallback
+      const getDate = (dateStr: string | undefined, fallback: string): string => {
+        try {
+          if (!dateStr) return fallback;
+          const date = new Date(dateStr);
+          return isNaN(date.getTime()) ? fallback : date.toISOString();
+        } catch {
+          return fallback;
         }
-        
-        console.log('📋 [NewsFeed] Processed news items:', newsItems);
-        setNews(newsItems);
-      } catch (err: any) {
-        console.error('Failed to fetch news:', err);
-        setError(err.message || 'Có lỗi xảy ra khi tải tin tức');
-      } finally {
-        setLoading(false);
+      };
+
+      // Get values with fallbacks
+      const now = new Date().toISOString();
+      const featuredImage = getValue(item, 'featuredImage', getValue(item, 'featured_image', '/images/default-news.jpg'));
+      const status = (getValue(item, 'status', 'draft') as PostStatus) || 'draft';
+      const createdAt = getDate(getValue(item, 'createdAt', getValue(item, 'created_at', now)), now);
+      const updatedAt = getDate(getValue(item, 'updatedAt', getValue(item, 'updated_at', now)), now);
+      const publishedAt = getValue(item, 'publishedAt', getValue(item, 'published_at', undefined));
+
+      // Process author
+      const author = item.author || {
+        id: 'anonymous',
+        name: 'Ẩn danh',
+        full_name: 'Ẩn danh',
+        email: 'anonymous@example.com'
+      };
+
+      // Process category
+      const category = item.category || null;
+
+      // Process SEO fields
+      const seoTitle = getValue(item, 'seoTitle', getValue(item, 'meta_title', item.title || ''));
+      const seoDescription = getValue(item, 'seoDescription', getValue(item, 'meta_description', item.excerpt || ''));
+      const seoKeywords = Array.isArray(item.seoKeywords) ? item.seoKeywords : [];
+
+      // Create the processed post
+      const processedItem: ExtendedPost = {
+        ...item,
+        id: String(item.id || ''),
+        title: String(item.title || 'Không có tiêu đề'),
+        slug: String(item.slug || ''),
+        excerpt: String(item.excerpt || ''),
+        content: String(item.content || ''),
+
+        // Media
+        featuredImage,
+        featured_image: featuredImage,
+
+        // Status and dates
+        status,
+        createdAt,
+        updatedAt,
+        created_at: createdAt,
+        updated_at: updatedAt,
+        publishedAt: publishedAt,
+        published_at: publishedAt,
+
+        // Relationships
+        author,
+        category,
+        tags: processTags(item.tags || []),
+
+        // SEO
+        seoTitle,
+        seoDescription,
+        seoKeywords,
+        meta_title: seoTitle,
+        meta_description: seoDescription,
+
+        // Stats - handle both snake_case and camelCase
+        viewCount: Number(item.viewCount ?? item.view_count ?? 0) || 0,
+        view_count: Number(item.viewCount ?? item.view_count ?? 0) || 0,
+        likeCount: Number(item.likeCount ?? item.like_count ?? 0) || 0,
+        like_count: Number(item.likeCount ?? item.like_count ?? 0) || 0,
+        commentCount: Number(item.commentCount ?? item.comment_count ?? 0) || 0,
+        comment_count: Number(item.commentCount ?? item.comment_count ?? 0) || 0,
+        readingTime: Number(item.readingTime ?? item.reading_time ?? 0) || 0,
+        reading_time: Number(item.readingTime ?? item.reading_time ?? 0) || 0,
+
+        // Compatibility flags
+        isPublished: !!item.isPublished,
+        isFeatured: !!item.isFeatured
+      };
+
+      // Create excerpt from content if not provided
+      if (!processedItem.excerpt && processedItem.content) {
+        const plainText = String(processedItem.content || '')
+          .replace(/<[^>]*>?/gm, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        processedItem.excerpt = plainText.substring(0, 150) +
+          (plainText.length > 150 ? '...' : '');
       }
-    };
 
-    fetchNews();
-  }, [category, limit]);
+      return processedItem;
+    });
+  }, [news]);
 
   if (loading) {
     return (
@@ -85,7 +209,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
     return (
       <div className="text-center py-8 text-red-600">
         <p>{error}</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
@@ -106,11 +230,11 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {news.map((item: Post) => (
+        {processedNews.map((item: ExtendedPost) => (
           <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300">
             <div className="relative h-48 w-full">
               <Image
-                src={getImageUrl((item as any).thumbnail || (item as any).image, '/images/placeholder-news.svg')}
+                src={getImageUrl(item.image_url || item.thumbnail || item.featured_image || item.featuredImage || '', '/images/placeholder-news.svg')}
                 alt={item.title}
                 fill
                 className="object-cover"
@@ -128,15 +252,15 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
                 <span>
                   {(() => {
                     try {
-                      const dateValue = item.publishedAt || item.createdAt;
+                      const dateValue = item.published_at || item.created_at;
                       if (!dateValue) return 'N/A';
-                      
-                      const date = new Date(dateValue);
-                      return isValid(date) 
+
+                      const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+                      return isValid(date)
                         ? format(date, 'dd/MM/yyyy', { locale: vi })
                         : 'N/A';
                     } catch (error) {
-                      console.error('Error formatting date:', error, 'Date value:', item.publishedAt || item.createdAt);
+                      console.error('Error formatting date:', error, 'Date value:', item.published_at || item.created_at);
                       return 'N/A';
                     }
                   })()}
@@ -146,9 +270,9 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
                 <span>{(item as any).readingTime || '3'} phút đọc</span>
               </div>
               <p className="text-gray-600 line-clamp-3 mb-4">
-                {(item as any).summary || (item as any).excerpt || item.seoDescription || (item as any).description || ''}
+                {item.excerpt || item.meta_description || ''}
               </p>
-              <Link 
+              <Link
                 href={getPostUrl(item.slug)}
                 className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium"
               >
@@ -162,8 +286,8 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ category, limit = 6 }) => {
 
       {category && (
         <div className="mt-6 text-center">
-          <Link 
-            href={`/danh-muc/${category}`} 
+          <Link
+            href={`/danh-muc/${category}`}
             className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium"
           >
             Xem thêm tin tức <ArrowRight size={16} className="ml-1" />

@@ -7,6 +7,19 @@ import Link from '@tiptap/extension-link';
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 
+// Disable SSR for the editor to prevent hydration issues
+const DynamicEditor = dynamic(
+  () => import('@tiptap/react').then((mod) => mod.EditorContent),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="prose max-w-none min-h-[300px] p-4 border rounded-md">
+        Đang tải trình soạn thảo...
+      </div>
+    )
+  }
+);
+
 interface TipTapEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -76,11 +89,13 @@ const TipTapEditor = ({
     );
   }
 
-
   return (
-    <div className="border rounded overflow-hidden">
+    <div className="border rounded-md overflow-hidden">
       <MenuBar editor={editor} />
-      <EditorContent editor={editor} className="min-h-[300px]" />
+      <DynamicEditor
+        editor={editor}
+        className="border-t border-gray-200"
+      />
     </div>
   );
 };

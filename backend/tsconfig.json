@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./shared",
+    "baseUrl": ".",
+    "paths": {
+      "@bao-moi/shared/*": ["./shared/*"]
+    },
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": ["node"]
+  },
+  "include": ["shared/**/*"],
+  "exclude": ["node_modules", "**/dist"]
+}

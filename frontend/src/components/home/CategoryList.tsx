@@ -1,3 +1,4 @@
+/** @jsxImportSource @emotion/react */
 import React from 'react';
 import Link from 'next/link';
 import { useCategories } from '../../hooks/useCategories';

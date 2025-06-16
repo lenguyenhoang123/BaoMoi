@@ -122,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loadUser();
   }, []);
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = async (credentials: LoginCredentials): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -155,67 +155,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       console.log('✅ Đăng nhập thành công, nhận được token:', data.token ? 'Có token' : 'Không có token');
       
-      // Lưu token vào localStorage nếu người dùng chọn "Ghi nhớ đăng nhập"
-      if (rememberMe) {
-        console.log('💾 Lưu token vào localStorage');
-        localStorage.setItem('token', data.token);
-      } else {
-        // Nếu không chọn ghi nhớ, chỉ lưu vào sessionStorage
-        console.log('💾 Lưu token vào sessionStorage');
-        sessionStorage.setItem('token', data.token);
-      }
+      // Lưu token vào storage
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('token', data.token);
       
       // Gọi API /me để lấy thông tin user mới nhất
-      try {
-        console.log('🔄 Đang lấy thông tin người dùng từ /api/auth/me...');
-        const meUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/auth/me`;
-        const userResponse = await fetch(meUrl, {
-          headers: {
-            'Authorization': `Bearer ${data.token}`,
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
-        
-        if (!userResponse.ok) {
-          throw new Error('Không thể lấy thông tin người dùng');
-        }
-        
-        const userData = await userResponse.json();
-        
-        // Tạo đối tượng user từ dữ liệu trả về
-        const userProfile: User = {
-          id: userData.id || '',
-          username: userData.email || '',
-          email: userData.email || '',
-          name: userData.full_name || userData.email?.split('@')[0] || 'User',
-          full_name: userData.full_name || userData.email?.split('@')[0] || 'User',
-          phone: userData.phone || '',
-          avatar: userData.avatar || '',
-          role: userData.role || 'user',
-          email_verified: userData.email_verified || userData.verified_at !== null,
-          ...userData
-        };
-        
-        console.log('👤 Thông tin người dùng đã nhận được:', userProfile);
-        
-        // Cập nhật state user - điều này sẽ trigger re-render các component sử dụng useAuth()
-        setUser(userProfile);
-        
-        // Lưu thông tin user vào localStorage để giữ trạng thái đăng nhập
-        localStorage.setItem('user', JSON.stringify(userProfile));
-        console.log('💾 Đã lưu thông tin người dùng vào localStorage');
-        
-        // Chuyển hướng về trang chủ
-        console.log('🔄 Đang chuyển hướng về trang chủ...');
-        router.push('/');
-        
-        // Không cần gọi router.refresh() vì setUser đã trigger re-render
-      } catch (error) {
-        console.error('❌ Lỗi khi lấy thông tin người dùng:', error);
-        throw new Error('Không thể tải thông tin người dùng');
+      console.log('🔄 Đang lấy thông tin người dùng từ /api/auth/me...');
+      const meUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/auth/me`;
+      const userResponse = await fetch(meUrl, {
+        headers: {
+          'Authorization': `Bearer ${data.token}`,
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Không thể lấy thông tin người dùng');
       }
+      
+      const userData = await userResponse.json();
+      
+      // Tạo đối tượng user từ dữ liệu trả về
+      const userProfile: User = {
+        id: userData.id || '',
+        username: userData.email || '',
+        email: userData.email || '',
+        name: userData.full_name || userData.email?.split('@')[0] || 'User',
+        full_name: userData.full_name || userData.email?.split('@')[0] || 'User',
+        phone: userData.phone || '',
+        avatar: userData.avatar || '',
+        role: userData.role || 'user',
+        email_verified: userData.email_verified || false,
+        ...userData
+      };
+      
+      // Cập nhật state user và đảm bảo re-render
+      setUser(prevUser => ({
+        ...prevUser,
+        ...userProfile
+      }));
+      
+      // Lưu thông tin user vào storage
+      storage.setItem('user', JSON.stringify(userProfile));
+      
+      console.log('✅ Đã cập nhật thông tin người dùng', userProfile);
+      
+      // Force re-render bằng cách cập nhật state một lần nữa
+      setUser(prevUser => ({
+        ...prevUser,
+        ...userProfile,
+        // Thêm một trường timestamp để đảm bảo re-render
+        _updatedAt: Date.now()
+      }));
+      
     } catch (error) {
+      console.error('❌ Lỗi đăng nhập:', error);
       setError(error instanceof Error ? error.message : 'Đã xảy ra lỗi khi đăng nhập');
       throw error;
     } finally {

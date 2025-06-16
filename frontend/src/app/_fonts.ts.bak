@@ -1,0 +1,15 @@
+import { Roboto, Noto_Serif } from 'next/font/google';
+
+export const roboto = Roboto({
+  weight: ['300', '400', '500', '700'],
+  subsets: ['vietnamese', 'latin'],
+  variable: '--font-roboto',
+  display: 'swap',
+});
+
+export const notoSerif = Noto_Serif({
+  weight: ['400', '700'],
+  subsets: ['vietnamese', 'latin'],
+  variable: '--font-noto-serif',
+  display: 'swap',
+});

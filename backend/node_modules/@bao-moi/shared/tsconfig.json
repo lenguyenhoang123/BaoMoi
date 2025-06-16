@@ -1,0 +1,19 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../dist/shared",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@bao-moi/shared/*": ["./*"]
+    },
+    "types": ["node"],
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}
