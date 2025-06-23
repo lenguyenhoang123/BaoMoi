@@ -68,3 +68,9 @@ yarn-error.log*
 
 # Yarn Integrity file
 .yarn-integrity
+
+# Logs
+logs
+*.log
+backend/**/logs/
+backend/**/*.log
