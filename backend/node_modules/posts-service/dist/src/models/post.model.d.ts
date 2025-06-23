@@ -1,9 +1,19 @@
+export interface CategoryType {
+    id: string;
+    name: string;
+    slug: string;
+    description?: string;
+    created_at?: Date;
+    updated_at?: Date;
+}
 export interface PostType {
     id: string;
     title: string;
     slug: string;
     content: string;
     status: string;
+    category_id?: string | null;
+    category?: CategoryType | null;
     created_at: Date;
     updated_at: Date;
     image_url?: string | null;
@@ -11,10 +21,12 @@ export interface PostType {
     save?(): Promise<PostType>;
     update?(data: Partial<Omit<PostType, 'id' | 'created_at' | 'updated_at'>>): Promise<PostType>;
     delete?(): Promise<boolean>;
+    getCategory?(): Promise<CategoryType | null>;
 }
 export interface FindAllOptions {
     limit?: number;
     offset?: number;
+    status?: string;
 }
 declare class Post {
     /**
@@ -22,13 +34,27 @@ declare class Post {
      * @param options - Các tùy chọn phân trang
      * @returns Promise chứa mảng các bài viết
      */
-    static findAll({ limit, offset }?: FindAllOptions): Promise<PostType[]>;
+    /**
+     * Lấy danh sách bài viết với phân trang và lọc
+     * @param options - Các tùy chọn tìm kiếm và phân trang
+     * @returns Promise chứa thông tin phân trang và danh sách bài viết
+     */
+    static findAll({ limit, offset, status }?: FindAllOptions): Promise<{
+        posts: PostType[];
+        total: number;
+        page: number;
+        totalPages: number;
+    }>;
     /**
      * Tìm bài viết theo ID
      * @param id - ID của bài viết
      * @returns Promise chứa thông tin bài viết hoặc null nếu không tìm thấy
      */
     static findById(id: string): Promise<PostType | null>;
+    /**
+     * Lấy thông tin chi tiết của danh mục cho bài viết
+     * @returns Promise chứa thông tin danh mục hoặc null nếu không có
+     */
     /**
      * Tạo bài viết mới
      * @param data - Dữ liệu bài viết mới

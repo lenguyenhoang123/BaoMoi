@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Menu, Search as SearchIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getCategories, type Category } from '@/services/categories';
 import UserMenu from '@/components/user/UserMenu';
 
 interface NavItemProps {
@@ -30,11 +31,33 @@ const NavItem = ({ href, children, isActive = false }: NavItemProps) => {
   );
 }
 
+// Sử dụng interface Category từ service categories
+
 const NewHeader = () => {
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [currentDate, setCurrentDate] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Lấy danh sách danh mục từ service
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const categories = await getCategories();
+        setCategories(categories);
+      } catch (error) {
+        console.error('Lỗi khi lấy danh sách danh mục:', error);
+        // Đặt danh sách rỗng nếu có lỗi để tránh hiển thị lỗi giao diện
+        setCategories([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchCategories();
+  }, []);
 
   // Cập nhật ngày tháng hiện tại
   useEffect(() => {
@@ -165,13 +188,22 @@ const NewHeader = () => {
               <div className="flex items-center justify-between h-12">
                 <div className="flex space-x-1">
                   <NavItem href="/" isActive>TRANG CHỦ</NavItem>
-                  <NavItem href="/thoi-su">THỜI SỰ</NavItem>
-                  <NavItem href="/the-gioi">THẾ GIỚI</NavItem>
-                  <NavItem href="/kinh-doanh">KINH DOANH</NavItem>
-                  <NavItem href="/giai-tri">GIẢI TRÍ</NavItem>
-                  <NavItem href="/the-thao">THỂ THAO</NavItem>
-                  <NavItem href="/giao-duc">GIÁO DỤC</NavItem>
-                  <NavItem href="/doi-song">ĐỜI SỐNG</NavItem>
+                  {isLoading ? (
+                    // Hiển thị skeleton loading khi đang tải
+                    [...Array(6)].map((_, i) => (
+                      <div key={i} className="h-12 w-24 bg-gray-200 animate-pulse mx-1"></div>
+                    ))
+                  ) : (
+                    // Hiển thị danh sách danh mục từ API
+                    categories.slice(0, 7).map((category) => (
+                      <NavItem 
+                        key={category.id} 
+                        href={`/categories/${category.id}`}
+                      >
+                        {category.name.toUpperCase()}
+                      </NavItem>
+                    ))
+                  )}
                 </div>
                 {/* Đã bỏ nút tìm kiếm khỏi thanh thể loại */}
               </div>

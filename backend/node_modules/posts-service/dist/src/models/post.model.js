@@ -11,17 +11,54 @@ class Post {
      * @param options - Các tùy chọn phân trang
      * @returns Promise chứa mảng các bài viết
      */
-    static async findAll({ limit = 10, offset = 0 } = {}) {
+    /**
+     * Lấy danh sách bài viết với phân trang và lọc
+     * @param options - Các tùy chọn tìm kiếm và phân trang
+     * @returns Promise chứa thông tin phân trang và danh sách bài viết
+     */
+    static async findAll({ limit = 10, offset = 0, status } = {}) {
         try {
+            // Đảm bảo limit và offset là số dương
+            const safeLimit = Math.max(1, limit);
+            const safeOffset = Math.max(0, offset);
+            // Xây dựng query với parameterized values
+            const queryParams = [safeLimit, safeOffset];
+            const whereClause = status ? 'WHERE status = $3' : '';
+            if (status) {
+                queryParams.push(status);
+            }
+            // Sử dụng COUNT(*) OVER() để lấy tổng số bản ghi trong một lần query
             const query = `
-        SELECT id, title, content, created_at, updated_at, slug, excerpt, 
-               featured_image, status, view_count, is_featured, is_hot,
-               featured_order, hot_order, featured_expires_at, hot_expires_at
+        SELECT 
+          id, title, content, created_at, updated_at, 
+          slug, status, image_url, tags,
+          COUNT(*) OVER() as total_count
         FROM posts 
+        ${whereClause}
         ORDER BY created_at DESC
         LIMIT $1 OFFSET $2`;
-            const result = await database_1.default.query(query, [limit, offset]);
-            return result.rows;
+            const result = await database_1.default.query(query, queryParams);
+            // Nếu không có kết quả, trả về mảng rỗng với total = 0
+            if (result.rows.length === 0) {
+                return {
+                    posts: [],
+                    total: 0,
+                    page: Math.floor(safeOffset / safeLimit) + 1,
+                    totalPages: 0
+                };
+            }
+            // Lấy tổng số bản ghi từ kết quả trả về
+            const total = parseInt(result.rows[0].total_count.toString());
+            const currentPage = Math.floor(safeOffset / safeLimit) + 1;
+            const totalPages = Math.ceil(total / safeLimit);
+            // Loại bỏ trường total_count khỏi kết quả trả về
+            const posts = result.rows.map(({ total_count, ...post }) => post);
+            return {
+                posts,
+                total,
+                page: currentPage,
+                totalPages
+            };
         }
         catch (error) {
             logger_1.default.error('Error in Post.findAll:', error);
@@ -37,13 +74,22 @@ class Post {
         try {
             const query = 'SELECT * FROM posts WHERE id = $1';
             const result = await database_1.default.query(query, [id]);
-            return result.rows[0] || null;
+            if (!result.rows[0]) {
+                return null;
+            }
+            return result.rows[0];
         }
         catch (error) {
-            logger_1.default.error('Error in Post.findById:', error);
+            logger_1.default.error('Lỗi khi tìm bài viết theo ID:', error);
             throw error;
         }
     }
+    /**
+     * Lấy thông tin chi tiết của danh mục cho bài viết
+     * @returns Promise chứa thông tin danh mục hoặc null nếu không có
+     */
+    // Phương thức này đã được di chuyển sang CategoryService
+    // Để lấy thông tin category, sử dụng CategoryService.getCategoryById(categoryId)
     /**
      * Tạo bài viết mới
      * @param data - Dữ liệu bài viết mới

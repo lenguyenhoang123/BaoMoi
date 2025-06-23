@@ -2,12 +2,23 @@ import { PoolClient, QueryResult } from 'pg';
 import db from '../config/database';
 import logger from '../utils/logger';
 
+export interface CategoryType {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  created_at?: Date;
+  updated_at?: Date;
+}
+
 export interface PostType {
   id: string;                    // ID duy nhất của bài viết (UUID)
   title: string;                 // Tiêu đề bài viết
   slug: string;                  // Đường dẫn thân thiện SEO
   content: string;               // Nội dung chính của bài viết
   status: string;                // Trạng thái: 'draft' | 'published' | 'archived'
+  category_id?: string | null;    // ID của danh mục (liên kết với Categories Service)
+  category?: CategoryType | null; // Thông tin đầy đủ của danh mục (khi join với bảng categories)
   created_at: Date;              // Thời điểm tạo bài viết
   updated_at: Date;              // Thời điểm cập nhật gần nhất
   image_url?: string | null;      // Đường dẫn ảnh đại diện (có thể null)
@@ -17,6 +28,7 @@ export interface PostType {
   save?(): Promise<PostType>;     // Lưu bài viết mới
   update?(data: Partial<Omit<PostType, 'id' | 'created_at' | 'updated_at'>>): Promise<PostType>; // Cập nhật thông tin bài viết
   delete?(): Promise<boolean>;    // Xóa bài viết
+  getCategory?(): Promise<CategoryType | null>; // Lấy thông tin chi tiết của danh mục
 }
 
 export interface FindAllOptions {
@@ -111,12 +123,24 @@ class Post {
     try {
       const query = 'SELECT * FROM posts WHERE id = $1';
       const result = await db.query<PostType>(query, [id]);
-      return result.rows[0] || null;
+      
+      if (!result.rows[0]) {
+        return null;
+      }
+      
+      return result.rows[0];
     } catch (error) {
-      logger.error('Error in Post.findById:', error);
+      logger.error('Lỗi khi tìm bài viết theo ID:', error);
       throw error;
     }
   }
+  
+  /**
+   * Lấy thông tin chi tiết của danh mục cho bài viết
+   * @returns Promise chứa thông tin danh mục hoặc null nếu không có
+   */
+  // Phương thức này đã được di chuyển sang CategoryService
+  // Để lấy thông tin category, sử dụng CategoryService.getCategoryById(categoryId)
 
   /**
    * Tạo bài viết mới

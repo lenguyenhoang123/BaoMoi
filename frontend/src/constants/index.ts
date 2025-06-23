@@ -6,24 +6,24 @@
 // API endpoints
 export const API_ENDPOINTS = {
   // Auth
-  LOGIN: '/api/auth/login',
-  REGISTER: '/api/auth/register',
-  LOGOUT: '/api/auth/logout',
-  REFRESH_TOKEN: '/api/auth/refresh-token',
-  ME: '/api/auth/me',
+  LOGIN: '/auth/login',
+  REGISTER: '/auth/register',
+  LOGOUT: '/auth/logout',
+  REFRESH_TOKEN: '/auth/refresh-token',
+  ME: '/auth/me',
   
   // Users
-  USERS: '/api/users',
+  USERS: '/users',
   
   // Posts
-  POSTS: '/api/posts',
-  FEATURED_POSTS: '/api/posts/featured',
+  POSTS: '/posts',
+  FEATURED_POSTS: '/posts/featured',
   
   // Categories
-  CATEGORIES: '/api/categories',
+  CATEGORIES: '/categories',
   
   // Comments
-  COMMENTS: '/api/comments',
+  COMMENTS: '/comments',
 } as const;
 
 // Local storage keys

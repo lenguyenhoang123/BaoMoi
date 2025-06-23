@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const pg_1 = require("pg");
 // Cấu hình kiểu dữ liệu số
-pg_1.types.setTypeParser(1700, parseFloat); // Cho kiểu numeric
+pg_1.types.setTypeParser(1700, parseFloat); // Xử lý kiểu dữ liệu numeric
 let pool = null;
 let retryCount = 0;
 const MAX_RETRIES = 5;
@@ -21,9 +21,18 @@ const config = {
             password: process.env.POSTGRES_PASSWORD || '123',
             port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
             max: 20,
+            min: 2,
             idleTimeoutMillis: 30000,
-            connectionTimeoutMillis: 10000,
+            connectionTimeoutMillis: 5000,
             ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+            // Cấu hình hỗ trợ tiếng Việt
+            client_encoding: 'utf8mb4',
+            // Tự động kết nối lại
+            keepAlive: true,
+            // Thời gian sống tối đa của kết nối (ms)
+            maxLifetimeMillis: 3600000,
+            // Thời gian giữa các lần kiểm tra kết nối (ms)
+            idle_in_transaction_session_timeout: 10000
         };
         console.log('🔄 Đang kết nối tới cơ sở dữ liệu...');
         console.log(`📡 Host: ${poolConfig.host}:${poolConfig.port}`);
@@ -57,20 +66,20 @@ const config = {
     async query(text, params = []) {
         if (!pool) {
             await this.init();
-            if (!pool) {
-                throw new Error('Không thể khởi tạo kết nối cơ sở dữ liệu');
-            }
+        }
+        if (!pool) {
+            throw new Error('Không thể khởi tạo kết nối cơ sở dữ liệu');
         }
         try {
             const start = Date.now();
             const result = await pool.query(text, params);
             const duration = Date.now() - start;
-            // Log các câu query chậm (lớn hơn 100ms)
+            // Ghi log các câu truy vấn chậm (lớn hơn 100ms)
             if (duration > 100) {
-                console.log(`🐌 Query chậm (${duration}ms):`, {
-                    query: text,
-                    params: params,
-                    duration: `${duration}ms`
+                console.log(`🐌 Truy vấn chậm (${duration}ms):`, {
+                    truy_vấn: text,
+                    tham_số: params,
+                    thời_gian: `${duration}ms`
                 });
             }
             return {
@@ -80,9 +89,9 @@ const config = {
         }
         catch (error) {
             console.error('❌ Lỗi truy vấn cơ sở dữ liệu:', {
-                query: text,
-                params: params,
-                error: error.message
+                truy_vấn: text,
+                tham_số: params,
+                lỗi: error.message
             });
             throw error;
         }
@@ -90,14 +99,16 @@ const config = {
     async getClient() {
         if (!pool) {
             await this.init();
-            if (!pool) {
-                throw new Error('Database pool is not initialized');
-            }
+        }
+        if (!pool) {
+            throw new Error('Database pool is not initialized');
         }
         try {
             const client = await pool.connect();
             return {
-                query: (text, params) => client.query(text, params),
+                query: async (text, params = []) => {
+                    return client.query(text, params);
+                },
                 release: (err) => client.release(err),
             };
         }

@@ -4,528 +4,316 @@ import db from '../config/database';
 import { PostType } from '../models/post.model';
 import { ApiResponse } from '../types';
 import PostService from '../services/post.service';
+import { CategoryService } from '../services/category.service';
 import { logger } from '../utils/logger';
 import BaseController from './base.controller';
 import catchAsync from '../utils/catchAsync';
 import { PostStatus } from '../types';
 
 interface PaginationParams {
-    limit: number;
-    offset: number;
-    page?: number;
+  limit: number;
+  offset: number;
+  page?: number;
 }
 
 interface PaginatedResponse<T> {
-    data: T[];
+  items: T[];
+  pagination: {
     total: number;
-    page: number;
-    limit: number;
     totalPages: number;
+    currentPage: number;
+    limit: number;
+    hasMore: boolean;
+  };
 }
 
 export default class PostController extends BaseController {
-    private postService = PostService;
+  private postService = PostService;
 
-    /**
-     * Lấy tất cả bài viết
-     */
-    public getAllPosts = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        // Lấy các tham số từ query
-        const {
-            page = '1',
-            limit = '10',
-            page_size,
-            is_published,
-            status,
-            category,
-            search
-        } = req.query;
+  /**
+   * Lấy tất cả bài viết
+   */
+  public getAllPosts = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    try {
+      // Lấy các tham số từ query
+      const {
+        page = '1',
+        limit = '10',
+        page_size = limit,
+        status,
+        search,
+        category,
+        is_published
+      } = req.query;
 
-        // Sử dụng page_size nếu có, không thì dùng limit
-        const pageSize = page_size ? Number(page_size) : Number(limit);
-        const pageNum = Number(page);
-        const offset = (pageNum - 1) * pageSize;
+    // Chuyển đổi page và limit sang number
+    const pageNum = parseInt(page as string, 10) || 1;
+    const pageSize = parseInt(page_size as string, 10) || 10;
+    const offset = (pageNum - 1) * pageSize;
 
-        // Build câu query
-        let query = `
-      SELECT 
-        p.*,
-        'system' as author_id,
-        'Hệ thống' as author_name,
-        '/default-avatar.png' as author_avatar,
-        'default-category' as category_id,
-        'Chưa phân loại' as category_name
+    // Xây dựng câu truy vấn SQL
+    let query = `
+      SELECT p.*, COUNT(*) OVER() as total_count
       FROM posts p
       WHERE 1=1
     `;
 
-        const values: any[] = [];
-        let paramIndex = 1;
+    const values: any[] = [];
+    let paramIndex = 1;
 
-        // Xử lý is_published - kiểm tra cả kiểu string và boolean
-        const isPublished = typeof is_published === 'string' 
-            ? is_published.toLowerCase() === 'true' 
-            : Boolean(is_published);
-            
-        if (isPublished) {
-            query += ` AND status = $${paramIndex++}`;
-            values.push('published');
-        } else if (status) {
-            query += ` AND status = $${paramIndex++}`;
-            values.push(status);
-        }
+    // Xử lý is_published - kiểm tra cả kiểu string và boolean
+    const isPublished = is_published !== undefined 
+      ? (typeof is_published === 'string' 
+          ? is_published.toLowerCase() === 'true' 
+          : Boolean(is_published))
+      : false;
 
-        // Xử lý tìm kiếm
-        if (search) {
-            query += ` AND (title ILIKE $${paramIndex} OR content ILIKE $${paramIndex})`;
-            values.push(`%${search}%`);
-            paramIndex++;
-        }
+    if (isPublished) {
+      query += ` AND status = $${paramIndex++}`;
+      values.push('published');
+    } else if (status) {
+      query += ` AND status = $${paramIndex++}`;
+      values.push(status);
+    }
 
-        // Xử lý category nếu có
-        if (category) {
-            query += ` AND category_id = $${paramIndex++}`;
-            values.push(category);
-        }
+    // Xử lý tìm kiếm
+    if (search) {
+      query += ` AND (title ILIKE $${paramIndex} OR content ILIKE $${paramIndex})`;
+      values.push(`%${search}%`);
+      paramIndex++;
+    }
 
-        // Thêm sắp xếp và phân trang
-        query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-        values.push(pageSize, offset);
+    // Xử lý category nếu có
+    if (category) {
+      query += ` AND category_id = $${paramIndex++}`;
+      values.push(category);
+    }
 
-        // Thực hiện query để lấy dữ liệu
-        const result = await db.query(query, values);
+    // Thêm sắp xếp và phân trang
+    query += ` ORDER BY p.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    values.push(pageSize, offset);
 
-        // Format lại dữ liệu theo đúng định dạng frontend mong đợi
-        const formattedPosts = result.rows.map(post => ({
-            id: post.id,
-            title: post.title,
-            slug: post.slug,
-            excerpt: post.excerpt || '',
-            content: post.content,
-            featuredImage: post.image_url,
-            author: {
-                id: 'system',
-                name: 'Hệ thống',
-                avatar: '/default-avatar.png'
-            },
-            category: {
-                id: 'default',
-                name: 'Chưa phân loại'
-            },
-            tags: this.processTags(post.tags),
-            status: post.status,
-            viewCount: post.view_count || 0,
-            likeCount: 0,
-            commentCount: 0,
-            isBreakingNews: post.is_breaking_news || false,
-            isTrending: post.is_trending || false,
-            priority: 'normal',
-            createdAt: post.created_at,
-            updatedAt: post.updated_at || post.created_at
-        }));
+    // Thực hiện query để lấy dữ liệu
+    const result = await db.query(query, values);
 
-        // Query để đếm tổng số bản ghi (không phân trang)
-        let countQuery = `
-      SELECT COUNT(*) 
-      FROM posts
-      WHERE 1=1
-    `;
-
-        // Thêm điều kiện lọc tương tự như query chính
-        if (is_published === 'true') {
-            countQuery += ` AND status = $1`;
-        } else if (status) {
-            countQuery += ` AND status = $1`;
-        }
-
-        if (search) {
-            const searchParamIndex = values.length > 0 ? 2 : 1;
-            countQuery += ` AND (title ILIKE $${searchParamIndex} OR content ILIKE $${searchParamIndex})`;
-        }
-
-        if (category) {
-            const categoryParamIndex = values.length > 0 ? (search ? 3 : 2) : 1;
-            countQuery += ` AND category_id = $${categoryParamIndex}`;
-        }
-
-        const countResult = await db.query(countQuery, values.slice(0, -2)); // Bỏ limit và offset
-        const total = parseInt(countResult.rows[0].count, 10);
-        const totalPages = Math.ceil(total / pageSize);
-
-        // Trả về dữ liệu theo đúng định dạng frontend mong đợi
-        res.status(200).json({
-            success: true,
-            data: {
-                items: formattedPosts,
-                pagination: {
-                    total,
-                    page: pageNum,
-                    limit: pageSize,
-                    totalPages,
-                    hasNextPage: pageNum < totalPages,
-                    hasPreviousPage: pageNum > 1
-                }
-            }
+    // Lấy danh sách category_id duy nhất từ các bài viết
+    const categoryIds = [...new Set(
+      result.rows
+        .filter(post => post.category_id)
+        .map(post => post.category_id)
+    )];
+    
+    logger.info(`Tìm thấy ${categoryIds.length} category_id duy nhất`);
+    
+    // Tạo map để lưu thông tin category
+    const categoriesMap = new Map();
+    
+    // Lấy thông tin chi tiết các category từ categories service
+    if (categoryIds.length > 0) {
+      try {
+        logger.info('Đang lấy thông tin chi tiết các danh mục...');
+        
+        // Đầu tiên, lấy tất cả danh mục
+        const allCategories = await CategoryService.getCategories();
+        logger.info(`Tổng số danh mục có sẵn: ${allCategories.length}`);
+        
+        // Tạo map từ ID sang category
+        allCategories.forEach(category => {
+          categoriesMap.set(category.id, category);
         });
-    });
-
-    // ... (giữ nguyên các phương thức khác)
-    public getFeaturedPosts = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const limit = parseInt(req.query.limit as string) || 5;
-        const currentDate = new Date().toISOString();
-
-        const query = `
-      SELECT 
-        id,
-        title,
-        slug,
-        summary,
-        image_url,
-        created_at
-      FROM posts 
-      WHERE status = 'published' 
-        AND is_featured = true
-        AND (publish_at IS NULL OR publish_at <= $1)
-      ORDER BY publish_at DESC, created_at DESC
-      LIMIT $2`;
-
-        const result = await db.query(query, [currentDate, limit]);
-        this.sendSuccess(res, result.rows);
-    });
-
-    public getHotPosts = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const limit = parseInt(req.query.limit as string) || 5;
-        const currentDate = new Date().toISOString();
-
-        const query = `
-      SELECT 
-        id,
-        title,
-        slug,
-        summary,
-        image_url,
-        created_at,
-        view_count
-      FROM posts 
-      WHERE status = 'published' 
-        AND is_hot = true
-        AND (publish_at IS NULL OR publish_at <= $1)
-      ORDER BY view_count DESC, created_at DESC
-      LIMIT $2`;
-
-        const result = await db.query(query, [currentDate, limit]);
-        this.sendSuccess(res, result.rows);
-    });
-
-    public getPost = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { id } = req.params;
-        const post = await this.getPostWithDetails(id);
-
-        if (!post) {
-            return this.sendNotFound(res, 'Không tìm thấy bài viết');
+        
+        // Kiểm tra xem có category_id nào không tìm thấy không
+        const missingCategories = categoryIds.filter(id => !categoriesMap.has(id));
+        if (missingCategories.length > 0) {
+          logger.warn(`Không tìm thấy thông tin cho ${missingCategories.length} danh mục:`, missingCategories);
         }
-
-        this.sendSuccess(res, post);
-    });
-
-    /**
-     * Tạo mới bài viết
-     */
-    public createPost = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { title, content, status = 'draft', image_url, tags } = req.body;
-        const userId = (req as any).user?.id || 'system';
-
-        // Kiểm tra các trường bắt buộc
-        if (!title || !content) {
-            return this.sendError(res, 'Vui lòng điền đầy đủ tiêu đề và nội dung', 400);
-        }
-
-        try {
-            // Tạo slug tự động từ tiêu đề
-            const slug = title
-                .toLowerCase()
-                .replace(/[^\w\s-]/g, '')
-                .replace(/\s+/g, '-')
-                .replace(/--+/g, '-')
-                .trim();
-
-            // Xử lý tags
-            let processedTags: string[] = [];
-            if (tags) {
-                if (Array.isArray(tags)) {
-                    processedTags = tags.filter(t => t !== null && t !== '');
-                } else if (typeof tags === 'string') {
-                    try {
-                        const parsed = JSON.parse(tags);
-                        processedTags = Array.isArray(parsed) ? parsed : [];
-                    } catch (e) {
-                        processedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-                    }
-                }
-            }
-
-
-            // Thêm bài viết vào database
-            const query = `
-        INSERT INTO posts (
-          title, content, status, slug, image_url, tags, user_id, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-        RETURNING *
-      `;
-
-            const values = [
-                title,
-                content,
-                status,
-                slug,
-                image_url || null,
-                processedTags.length > 0 ? processedTags : null,
-                userId
-            ];
-
-            const result = await db.query(query, values);
-            const newPost = result.rows[0];
-
-            // Lấy thông tin đầy đủ của bài viết
-            const fullPost = await this.getPostWithDetails(newPost.id);
-            this.sendSuccess(res, fullPost, 'Tạo bài viết thành công', 201);
-        } catch (error: any) {
-            if (error.code === '23505') { // Unique violation
-                return this.sendError(res, 'Tiêu đề đã tồn tại, vui lòng chọn tiêu đề khác', 400);
-            }
-            logger.error('Lỗi khi tạo bài viết:', error);
-            this.sendError(res, 'Có lỗi xảy ra khi tạo bài viết', 500);
-        }
-    });
-
-    /**
-     * Cập nhật bài viết
-     */
-    public updatePost = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { id } = req.params;
-        const { title, content, status, image_url, tags } = req.body;
-
-        try {
-            // Kiểm tra sự tồn tại của bài viết
-            const post = await this.getPostWithDetails(id);
-            if (!post) {
-                return this.sendNotFound(res, 'Không tìm thấy bài viết');
-            }
-
-            // Xây dựng câu lệnh UPDATE động
-            const updateFields: string[] = [];
-            const values: any[] = [];
-            let paramIndex = 1;
-
-            // Thêm các trường cập nhật
-            if (title !== undefined) {
-                updateFields.push(`title = $${paramIndex++}`);
-                values.push(title);
-            }
-
-            if (content !== undefined) {
-                updateFields.push(`content = $${paramIndex++}`);
-                values.push(content);
-            }
-
-            if (status !== undefined) {
-                updateFields.push(`status = $${paramIndex++}`);
-                values.push(status);
-            }
-
-            if (image_url !== undefined) {
-                updateFields.push(`image_url = $${paramIndex++}`);
-                values.push(image_url || null);
-            }
-
-            // Xử lý tags nếu có
-            if (tags !== undefined) {
-                let processedTags: string[] = [];
-                if (Array.isArray(tags)) {
-                    processedTags = tags.filter(t => t !== null && t !== '');
-                } else if (typeof tags === 'string') {
-                    try {
-                        const parsed = JSON.parse(tags);
-                        processedTags = Array.isArray(parsed) ? parsed : [];
-                    } catch (e) {
-                        processedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-                    }
-                }
-                updateFields.push(`tags = $${paramIndex++}`);
-                values.push(processedTags.length > 0 ? processedTags : null);
-            }
-
-            // Thêm thời gian cập nhật
-            updateFields.push(`updated_at = NOW()`);
-
-            // Thêm điều kiện WHERE
-            values.push(id);
-            const whereClause = `WHERE id = $${paramIndex}`;
-
-            // Tạo câu lệnh SQL hoàn chỉnh
-            const query = `
-        UPDATE posts 
-        SET ${updateFields.join(', ')}
-        ${whereClause}
-        RETURNING *
-      `;
-
-            const result = await db.query(query, values);
-            const updatedPost = result.rows[0];
-
-            if (!updatedPost) {
-                return this.sendError(res, 'Không thể cập nhật bài viết', 500);
-            }
-
-            // Lấy thông tin đầy đủ của bài viết đã cập nhật
-            const fullPost = await this.getPostWithDetails(updatedPost.id);
-            this.sendSuccess(res, fullPost, 'Cập nhật bài viết thành công');
-        } catch (error: any) {
-            if (error.code === '23505') { // Unique violation
-                return this.sendError(res, 'Tiêu đề đã tồn tại, vui lòng chọn tiêu đề khác', 400);
-            }
-            logger.error('Lỗi khi cập nhật bài viết:', error);
-            this.sendError(res, 'Có lỗi xảy ra khi cập nhật bài viết', 500);
-        }
-    });
-
-    /**
-     * Xóa bài viết
-     */
-    public deletePost = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { id } = req.params;
-
-        try {
-            // Kiểm tra sự tồn tại của bài viết
-            const post = await this.getPostWithDetails(id);
-            if (!post) {
-                return this.sendNotFound(res, 'Không tìm thấy bài viết');
-            }
-
-            // Xóa bài viết
-            const query = 'DELETE FROM posts WHERE id = $1 RETURNING *';
-            const result = await db.query(query, [id]);
-
-            if (result.rowCount === 0) {
-                return this.sendError(res, 'Không thể xóa bài viết', 500);
-            }
-
-            this.sendSuccess(res, null, 'Xóa bài viết thành công');
-        } catch (error) {
-            logger.error('Lỗi khi xóa bài viết:', error);
-            this.sendError(res, 'Có lỗi xảy ra khi xóa bài viết', 500);
-        }
-    });
-
-    /**
-     * Cập nhật trạng thái nổi bật
-     */
-    public updateFeaturedStatus = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { id } = req.params;
-        const { is_featured } = req.body;
-
-        if (typeof is_featured !== 'boolean') {
-            return this.sendError(res, 'Trạng thái không hợp lệ', 400);
-        }
-
-        try {
-            const query = 'UPDATE posts SET is_featured = $1, updated_at = NOW() WHERE id = $2 RETURNING *';
-            const result = await db.query(query, [is_featured, id]);
-
-            if (result.rowCount === 0) {
-                return this.sendNotFound(res, 'Không tìm thấy bài viết');
-            }
-
-            this.sendSuccess(res, result.rows[0], 'Cập nhật trạng thái nổi bật thành công');
-        } catch (error) {
-            logger.error('Lỗi khi cập nhật trạng thái nổi bật:', error);
-            this.sendError(res, 'Có lỗi xảy ra khi cập nhật trạng thái nổi bật', 500);
-        }
-    });
-
-    /**
-     * Cập nhật trạng thái hot
-     */
-    public updateHotStatus = catchAsync(async (req: Request, res: Response): Promise<void> => {
-        const { id } = req.params;
-        const { is_hot } = req.body;
-
-        if (typeof is_hot !== 'boolean') {
-            return this.sendError(res, 'Trạng thái không hợp lệ', 400);
-        }
-
-        try {
-            const query = 'UPDATE posts SET is_hot = $1, updated_at = NOW() WHERE id = $2 RETURNING *';
-            const result = await db.query(query, [is_hot, id]);
-
-            if (result.rowCount === 0) {
-                return this.sendNotFound(res, 'Không tìm thấy bài viết');
-            }
-
-            this.sendSuccess(res, result.rows[0], 'Cập nhật trạng thái hot thành công');
-        } catch (error) {
-            logger.error('Lỗi khi cập nhật trạng thái hot:', error);
-            this.sendError(res, 'Có lỗi xảy ra khi cập nhật trạng thái hot', 500);
-        }
-    });
-
-    /**
-     * Xử lý tags
-     */
-    private processTags(tags: any): string[] {
-        if (!tags) return [];
-
-        if (Array.isArray(tags)) {
-            return tags.filter(tag => tag && typeof tag === 'string');
-        }
-
-        if (typeof tags === 'string') {
-            try {
-                const parsed = JSON.parse(tags);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-                return tags.split(',').map((t: string) => t.trim()).filter(Boolean);
-            }
-        }
-
-        return [];
+        
+        logger.info(`Đã tải thông tin cho ${categoriesMap.size} danh mục`);
+      } catch (error) {
+        logger.error('Lỗi khi lấy thông tin danh mục:', error);
+        // Tiếp tục xử lý ngay cả khi không lấy được thông tin category
+      }
+    } else {
+      logger.info('No category IDs found in posts');
     }
 
-    /**
-     * Lấy thông tin chi tiết bài viết
-     */
-    private async getPostWithDetails(id: string): Promise<any> {
-        // Kiểm tra nếu id là 'posts' (trường hợp gọi sai route)
-        if (id === 'posts') {
-            throw new Error('Invalid post ID');
+    // Lấy tổng số bản ghi
+    const totalCount = result.rows[0]?.total_count || 0;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const hasMore = (pageNum * pageSize) < totalCount;
+
+    // Log thông tin categoriesMap để debug
+    logger.info('Categories in map:', Array.from(categoriesMap.entries()));
+    
+    // Gắn thông tin category vào từng bài viết
+    const postsWithCategories = result.rows.map((post: any) => {
+      const postData = { ...post };
+      
+      // Xóa các trường không cần thiết
+      delete postData.category_id;
+      
+      // Nếu bài viết có category_id
+      if (post.category_id) {
+        const category = categoriesMap.get(post.category_id);
+        if (category) {
+          // Đảm bảo có slug trước khi gán
+          if (!category.slug) {
+            logger.warn(`Danh mục ${category.id} không có slug:`, category);
+          }
+          
+          // Tạo đối tượng category với các trường cần thiết
+          postData.category = {
+            id: category.id,
+            name: category.name || 'Không có tên',
+            slug: category.slug || `category-${category.id}`,
+            description: category.description || '',
+            icon: category.icon || '',
+            is_active: category.is_active !== undefined ? category.is_active : true
+          };
+          
+          logger.debug(`Đã gắn danh mục cho bài viết ${post.id}:`, postData.category);
+        } else {
+          logger.warn(`Không tìm thấy thông tin cho danh mục ${post.category_id} của bài viết ${post.id}`);
+          postData.category = null;
         }
+      }
+      
+      return postData;
+    });
 
-        try {
-            const query = `
-          SELECT *
-          FROM posts
-          WHERE id = $1`;
-
-            const result = await db.query(query, [id]);
-            const post = result.rows[0];
-
-            if (!post) return null;
-
-            // Xử lý tags
-            if (post.tags && typeof post.tags === 'string') {
-                try {
-                    post.tags = JSON.parse(post.tags);
-                } catch (e) {
-                    post.tags = [];
-                }
-            } else if (!post.tags) {
-                post.tags = [];
-            }
-
-            return post;
-        } catch (error) {
-            console.error('Error in getPostWithDetails:', error);
-            throw error;
-        }
+    // Sử dụng các biến đã tính toán ở trên
+    
+    // Định nghĩa kiểu cho dữ liệu phản hồi
+    interface PostsPagination {
+      total: number;
+      totalPages: number;
+      currentPage: number;
+      limit: number;
+      hasMore: boolean;
     }
+
+    interface PostsResponseData {
+      items: any[];
+      pagination: PostsPagination;
+    }
+
+    // Tạo dữ liệu phân trang
+    const pagination: PostsPagination = {
+      total: totalCount,
+      totalPages: totalPages,
+      currentPage: pageNum,
+      limit: pageSize,
+      hasMore: hasMore,
+    };
+
+    // Tạo dữ liệu phản hồi
+    const responseData: PostsResponseData = {
+      items: postsWithCategories,
+      pagination: pagination,
+    };
+
+    // Tạo đối tượng phản hồi
+    const response: ApiResponse<PostsResponseData> = {
+      success: true,
+      data: responseData,
+      message: 'Lấy danh sách bài viết thành công',
+    };
+    
+    // Log thông tin phản hồi (chỉ trong môi trường phát triển)
+    if (process.env.NODE_ENV === 'development') {
+      logger.debug('Dữ liệu phản hồi:', {
+        totalPosts: postsWithCategories.length,
+        hasPosts: postsWithCategories.length > 0,
+        firstPostCategory: postsWithCategories[0]?.category ? {
+          id: postsWithCategories[0].category?.id,
+          name: postsWithCategories[0].category?.name,
+          slug: postsWithCategories[0].category?.slug
+        } : 'Không có danh mục',
+        pagination: {
+          total: totalCount,
+          totalPages: totalPages,
+          currentPage: pageNum,
+          limit: pageSize,
+          hasMore: hasMore
+        }
+      });
+    }
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      // Ghi log lỗi chi tiết
+      const errorDetails: Record<string, any> = {
+        message: error.message,
+        stack: error.stack
+      };
+
+      if (error.response) {
+        errorDetails.response = {
+          status: error.response.status,
+          data: error.response.data
+        };
+      }
+
+      logger.error('Lỗi khi lấy danh sách bài viết:', errorDetails);
+
+      // Trả về thông báo lỗi phù hợp
+      const isDev = process.env.NODE_ENV === 'development';
+      const errorResponse = {
+        success: false,
+        message: isDev
+          ? `Lỗi khi lấy danh sách bài viết: ${error.message}`
+          : 'Đã xảy ra lỗi khi lấy danh sách bài viết',
+        ...(isDev && {
+          error: error.message,
+          stack: error.stack
+        })
+      };
+
+      if (!res.headersSent) {
+        res.status(500).json(errorResponse);
+      } else {
+        logger.error('Response headers already sent');
+      }
+    }
+  });
+
+  // Các phương thức khác...
+  public getPostById = catchAsync(async (req: Request, res: Response): Promise<void> => {
+    const { id } = req.params;
+    
+    try {
+      // Lấy thông tin bài viết
+      const post = await this.postService.getPostById(id) as any;
+      
+      if (!post) {
+        res.status(404).json({ success: false, message: 'Không tìm thấy bài viết' });
+        return;
+      }
+      
+      // Lấy thông tin category nếu có
+      let category = null;
+      if (post.category_id) {
+        try {
+          category = await CategoryService.getCategoryById(post.category_id);
+        } catch (error) {
+          logger.error('Lỗi khi lấy thông tin danh mục:', error);
+        }
+      }
+      
+      // Trả về kết quả
+      res.status(200).json({
+        success: true,
+        data: {
+          ...post,
+          category
+        }
+      });
+    } catch (error) {
+      logger.error('Lỗi khi lấy thông tin bài viết:', error);
+      res.status(500).json({ success: false, message: 'Lỗi server nội bộ' });
+    }
+  });
+
+  // Các phương thức khác (create, update, delete, ...) cần được triển khai tương tự
+  // với việc xử lý category thông qua CategoryService
 }

@@ -1,0 +1,303 @@
+import express from 'express';
+import { createProxyMiddleware, Options } from 'http-proxy-middleware';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import path from 'path';
+import fs from 'fs';
+import winston from 'winston';
+
+// Configure __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config();
+
+const logDir = path.join(process.cwd(), 'logs');
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
+}
+
+// Configure logger
+const logger = winston.createLogger({
+  level: 'debug',
+  format: winston.format.combine(
+    winston.format.timestamp({
+      format: 'YYYY-MM-DD HH:mm:ss'
+    }),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'api-gateway' },
+  transports: [
+    new winston.transports.File({
+      filename: path.join(logDir, 'error.log'),
+      level: 'error'
+    }),
+    new winston.transports.File({
+      filename: path.join(logDir, 'combined.log')
+    })
+  ]
+});
+
+// If we're not in production then log to the console as well
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.simple()
+    )
+  }));
+}
+
+// Khởi tạo ứng dụng Express
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// CORS Configuration
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    const allowedOrigins = [
+      'http://localhost:3000',  // API Gateway
+      'http://localhost:3004',  // Frontend
+      'http://localhost:3002',  // Posts Service
+      'http://localhost:3005',  // Auth Service
+      'http://localhost:3008',  // Comments Service
+      'http://localhost:3009',  // Categories Service
+    ];
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Access-Token',
+    'X-Refresh-Token',
+    'cache-control',
+    'pragma',
+    'Accept',
+  ]
+};
+
+app.use(cors(corsOptions));
+
+// Interface cho cấu hình service
+interface ServiceConfig {
+  path: string;
+  target: string;
+  pathRewrite?: { [key: string]: string };
+  methods?: string[];
+  changeOrigin?: boolean;
+  logLevel?: string;
+  secure?: boolean;
+  xfwd?: boolean;
+  timeout?: number;
+  onProxyReq?: (proxyReq: any, req: any, res: any) => void;
+  onError?: (err: any, req: any, res: any) => void;
+  onProxyRes?: (proxyRes: any, req: any, res: any) => void;
+}
+
+// Hàm tạo proxy middleware
+const createServiceProxy = (config: ServiceConfig) => {
+  const { path, ...proxyConfig } = config;
+  
+  // Create base config without target to avoid duplication
+  const defaultConfig: Omit<Options, 'target'> = {
+    pathRewrite: { '^/api': '' },
+    changeOrigin: true,
+    logLevel: 'debug' as const,
+    secure: false,
+    xfwd: true,
+    timeout: 10000,
+    onProxyReq: (proxyReq: any, req: any) => {
+      logger.info(`[${new Date().toISOString()}] Proxying: ${req.method} ${req.originalUrl} -> ${proxyReq.getHeader('host')}${proxyReq.path}`);
+      
+      if (req.body && Object.keys(req.body).length > 0) {
+        try {
+          const bodyData = JSON.stringify(req.body);
+          proxyReq.setHeader('Content-Type', 'application/json');
+          proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+          proxyReq.write(bodyData);
+        } catch (error) {
+          logger.error('Error processing request body:', error);
+          throw error;
+        }
+      }
+    },
+    onError: (err: any, req: any, res: any) => {
+      logger.error(`[${new Date().toISOString()}] Proxy Error:`, err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Proxy error',
+          error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+        });
+      }
+    },
+    onProxyRes: (proxyRes: any, req: any, res: any) => {
+      logger.info(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} -> ${proxyRes.statusCode}`);
+    }
+  };
+
+  // Create the final options object with proper type safety
+  const proxyOptions: Options = {
+    ...defaultConfig,
+    ...proxyConfig,
+    // Ensure logLevel is properly typed
+    logLevel: (proxyConfig.logLevel as 'debug' | 'error' | 'info' | 'warn' | 'silent') || 'debug',
+    // Ensure target is always set from config
+    target: config.target
+  };
+
+  // Create the middleware with proper typing
+  const middleware = createProxyMiddleware(proxyOptions);
+  
+  // Handle array of paths by creating a wrapper function
+  if (Array.isArray(path)) {
+    return (req: any, res: any, next: any) => {
+      return middleware(req, res, next);
+    };
+  }
+  
+  // For single path, just return the middleware
+  return middleware;
+};
+
+// Cấu hình các dịch vụ
+const services: ServiceConfig[] = [
+  // Authentication Service
+  {
+    path: '/api/auth', // Sửa lại thành string thay vì mảng
+    target: 'http://localhost:3005',
+    pathRewrite: { '^/api': '' },
+    changeOrigin: true
+  },
+  // Auth direct path
+  {
+    path: '/auth',
+    target: 'http://localhost:3005',
+    changeOrigin: true
+  },
+  // Posts Service
+  {
+    path: '/api/posts',
+    target: 'http://localhost:3002',
+    pathRewrite: { '^/api': '' }
+  },
+  // Users Service
+  {
+    path: '/api/users',
+    target: 'http://localhost:3001',
+    pathRewrite: { '^/api': '' }
+  },
+  // Comments Service
+  {
+    path: '/api/comments',
+    target: 'http://localhost:3003',
+    pathRewrite: { '^/api': '' }
+  },
+  // Categories Service
+  {
+    path: '/api/categories',
+    target: 'http://localhost:3009',
+    pathRewrite: { '^/api': '' }
+  }
+];
+
+// Khởi tạo và sử dụng proxy cho từng dịch vụ
+services.forEach(service => {
+  const proxy = createServiceProxy(service);
+  
+  // Xử lý cả trường hợp path là string hoặc mảng các string
+  const paths = Array.isArray(service.path) ? service.path : [service.path];
+  paths.forEach(p => {
+    app.use(p, proxy);
+    
+    // Thêm health check endpoint
+    app.get(`${p}/health`, (req, res) => {
+      res.json({
+        status: 'ok',
+        service: p,
+        target: service.target,
+        timestamp: new Date().toISOString()
+      });
+    });
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'api-gateway',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Endpoint not found',
+    path: req.originalUrl
+  });
+});
+
+// Error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  logger.error(`[${new Date().toISOString()}] Error:`, err);
+  
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// Khởi động server
+const server = app.listen(PORT, () => {
+  console.log(`\n🚀 API Gateway đang chạy tại http://localhost:${PORT}`);
+  console.log('📡 Các dịch vụ đang được chuyển tiếp:');
+  services.forEach(service => {
+    const paths = Array.isArray(service.path) ? service.path : [service.path];
+    paths.forEach(p => {
+      console.log(`   - ${p} -> ${service.target}`);
+    });
+  });
+  console.log('\n🔍 Đang chờ yêu cầu...');
+});
+
+// Xử lý tắt server đúng cách
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    logger.info('Process terminated');
+    process.exit(0);
+  });
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+export default app;

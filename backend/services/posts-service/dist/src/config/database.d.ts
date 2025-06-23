@@ -1,19 +1,13 @@
-type QueryResult<T = any> = {
-    rows: T[];
-    rowCount: number;
-    command: string;
-    oid: number;
-    fields: any[];
-};
+import { QueryResult, QueryResultRow } from 'pg';
 interface DatabaseConfig {
     isConnected: boolean;
     init(): Promise<void>;
-    query<T = any>(text: string, params?: any[]): Promise<{
+    query<T extends QueryResultRow = any>(text: string, params?: any[]): Promise<{
         rows: T[];
         rowCount: number;
     }>;
     getClient(): Promise<{
-        query: (text: string, params: any[]) => Promise<QueryResult>;
+        query: <T extends QueryResultRow = any>(text: string, params: any[]) => Promise<QueryResult<T>>;
         release: (err?: Error | boolean) => void;
     }>;
     end(): Promise<void>;

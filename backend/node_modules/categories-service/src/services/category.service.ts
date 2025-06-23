@@ -3,7 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { Category, CategoryAttributes } from '../models/category.model';
 import { NotFoundError } from '../utils/errors';
 
-// Hàm tạo slug từ chuỗi bất kỳ
+/**
+ * Tạo chuỗi slug từ một chuỗi bất kỳ
+ * @param str - Chuỗi đầu vào cần chuyển đổi
+ * @returns Chuỗi slug đã được định dạng
+ */
 const generateSlug = (str: string): string => {
   if (!str) return '';
   // Chuyển đổi tiếng Việt có dấu sang không dấu
@@ -17,7 +21,10 @@ const generateSlug = (str: string): string => {
     .replace(/[-\s]+$/g, '');
 };
 
-// Định nghĩa interface đơn giản hóa cho phản hồi
+/**
+ * Định nghĩa cấu trúc dữ liệu đơn giản hóa cho danh mục
+ * Sử dụng cho việc trả về dữ liệu từ API
+ */
 export interface SimpleCategory {
   id: string;                    // ID của danh mục
   name: string;                  // Tên danh mục
@@ -32,14 +39,20 @@ export interface SimpleCategory {
   children?: SimpleCategory[];   // Danh sách danh mục con
 }
 
-// Định nghĩa các kiểu dữ liệu tùy chỉnh
+/**
+ * Định nghĩa các kiểu dữ liệu tùy chỉnh
+ * Sử dụng cho việc kiểm tra kiểu dữ liệu đầu vào
+ */
 type CategoryCreateInput = Omit<CategoryAttributes, 'id' | 'created_at' | 'updated_at' | 'deleted_at'> & {
   is_active?: boolean;
 };
 
 type CategoryUpdateInput = Partial<CategoryCreateInput>;
 
-// Định nghĩa lỗi tùy chỉnh
+/**
+ * Lớp ngoại lệ cho lỗi yêu cầu không hợp lệ
+ * Kế thừa từ Error mặc định của JavaScript
+ */
 class BadRequestError extends Error {
   constructor(message: string) {
     super(message);
@@ -47,11 +60,18 @@ class BadRequestError extends Error {
   }
 }
 
+/**
+ * Lớp dịch vụ xử lý các thao tác liên quan đến danh mục
+ * Bao gồm: thêm, sửa, xóa, tìm kiếm danh mục
+ */
 export class CategoryService {
   /**
    * Lấy danh sách tất cả danh mục
+   * @param includeInactive - Có bao gồm danh mục không hoạt động không
+   * @returns Mảng các danh mục đã được định dạng
+   * @throws {Error} Nếu có lỗi khi truy vấn dữ liệu
    */
-  static async getAllCategories(includeInactive: boolean = false): Promise<SimpleCategory[]> {
+  static async getAllCategories(includeInactive = false): Promise<SimpleCategory[]> {
     try {
       console.log('Bắt đầu lấy danh sách danh mục, includeInactive:', includeInactive);
       
@@ -128,11 +148,21 @@ export class CategoryService {
   }
 
   /**
-   * Lấy thông tin chi tiết danh mục theo ID
+   * Lấy thông tin chi tiết một danh mục theo ID
+   * @param id - ID của danh mục cần lấy
+   * @returns Thông tin chi tiết danh mục
+   * @throws {NotFoundError} Nếu không tìm thấy danh mục
+   * @throws {Error} Nếu có lỗi khi truy vấn dữ liệu
    */
+  // Kiểm tra UUID hợp lệ
+  private static isValidUUID(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
   static async getCategoryById(id: string): Promise<SimpleCategory> {
-    if (!id) {
-      console.error('Lỗi: ID danh mục không được để trống');
+    if (!id || !CategoryService.isValidUUID(id)) {
+      console.error(`Lỗi: ID danh mục không hợp lệ: ${id}`);
       throw new BadRequestError('ID danh mục không hợp lệ');
     }
     
@@ -211,7 +241,11 @@ export class CategoryService {
   }
 
   /**
-   * Tạo mới danh mục
+   * Tạo mới một danh mục
+   * @param data - Dữ liệu để tạo danh mục mới
+   * @returns Thông tin danh mục đã tạo
+   * @throws {BadRequestError} Nếu dữ liệu không hợp lệ
+   * @throws {Error} Nếu có lỗi khi tạo danh mục
    */
   static async createCategory(data: CategoryCreateInput): Promise<SimpleCategory> {
     try {
@@ -285,7 +319,13 @@ export class CategoryService {
   }
 
   /**
-   * Cập nhật thông tin danh mục
+   * Cập nhật thông tin một danh mục
+   * @param id - ID của danh mục cần cập nhật
+   * @param data - Dữ liệu cập nhật
+   * @returns Thông tin danh mục đã cập nhật
+   * @throws {NotFoundError} Nếu không tìm thấy danh mục
+   * @throws {BadRequestError} Nếu slug mới đã tồn tại
+   * @throws {Error} Nếu có lỗi khi cập nhật
    */
   static async updateCategory(
     id: string,
@@ -321,7 +361,10 @@ export class CategoryService {
   }
 
   /**
-   * Xóa mềm danh mục
+   * Xóa mềm một danh mục (đánh dấu đã xóa thay vì xóa cứng)
+   * @param id - ID của danh mục cần xóa
+   * @throws {NotFoundError} Nếu không tìm thấy danh mục
+   * @throws {Error} Nếu có lỗi khi xóa
    */
   static async deleteCategory(id: string): Promise<void> {
     // Tìm danh mục theo ID
@@ -338,10 +381,14 @@ export class CategoryService {
 
   /**
    * Tìm kiếm danh mục theo từ khóa
+   * @param query - Từ khóa tìm kiếm (tên, slug hoặc mô tả)
+   * @param includeInactive - Có bao gồm danh mục không hoạt động không
+   * @returns Mảng các danh mục phù hợp với từ khóa
+   * @throws {Error} Nếu có lỗi khi tìm kiếm
    */
   static async searchCategories(
-    query: string,                    // Từ khóa tìm kiếm
-    includeInactive: boolean = false   // Có bao gồm danh mục không hoạt động không
+    query: string,
+    includeInactive: boolean = false
   ): Promise<SimpleCategory[]> {
     // Điều kiện tìm kiếm
     const where: any = {

@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { newsService } from '../services/news';
-import { Post } from '../types';
+import { newsService, NewsItem } from '../services/news';
+
+type NewsItemOrPost = NewsItem; // For now, we'll just use NewsItem
+
+interface UseNewsListParams {
+  page?: number;
+  category?: string;
+  search?: string;
+  initialLoad?: boolean;
+}
 
 /**
  * Tham số cho hook useNewsList
@@ -27,7 +35,7 @@ export const useNewsList = ({
   search,
   initialLoad = true,
 }: UseNewsListParams = {}) => {
-  const [news, setNews] = useState<Post[]>([]);
+  const [news, setNews] = useState<NewsItemOrPost[]>([]);
   const [loading, setLoading] = useState(initialLoad);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -38,29 +46,29 @@ export const useNewsList = ({
       try {
         setLoading(true);
         setError(null);
-        const params: Record<string, any> = { page: currentPage };
+        const params: Record<string, any> = {
+          page: currentPage,
+          limit: 6,
+          page_size: 6
+        };
+
         if (category) params.category = category;
         if (search) params.search = search;
 
-        const response = await newsService.getNews({
-          ...params,
-          page_size: params.limit || 6, // Đảm bảo sử dụng page_size thay vì limit
-          page: currentPage
-        });
-
+        const response = await newsService.getNews(params);
         console.log('📊 [useNewsList] Response:', response);
 
         // Xử lý phản hồi từ API
-        if (response && response.success && response.data) {
+        if (response?.success && response.data) {
           const { items, pagination } = response.data;
-          
+
           if (Array.isArray(items)) {
             // Nếu là trang đầu tiên, thay thế danh sách hiện tại
             // Nếu không, thêm vào cuối danh sách hiện có
-            setNews(prevNews => 
+            setNews(prevNews =>
               currentPage === 1 ? items : [...prevNews, ...items]
             );
-            
+
             // Kiểm tra xem còn trang nào khác không
             if (pagination) {
               const { page, pageSize, totalItems } = pagination;
@@ -68,9 +76,6 @@ export const useNewsList = ({
             } else {
               setHasMore(items.length > 0);
             }
-            
-            // Cập nhật số trang hiện tại
-            setCurrentPage(currentPage);
           } else {
             console.warn('Items is not an array:', items);
             setNews([]);
@@ -107,8 +112,18 @@ export const useNewsList = ({
       if (search) params.search = search;
 
       const response = await newsService.getNews(params);
-      setNews(response.results);
-      setHasMore(!!response.next);
+      if (response.success && response.data) {
+        setNews(prev => currentPage === 1
+          ? response.data.items
+          : [...prev, ...response.data.items]);
+
+        if (response.data.pagination) {
+          const { page, pageSize, totalItems } = response.data.pagination;
+          setHasMore(page * pageSize < totalItems);
+        } else {
+          setHasMore(response.data.items.length > 0);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi tải tin tức');
     } finally {
@@ -116,7 +131,16 @@ export const useNewsList = ({
     }
   };
 
-  return { news, loading, error, hasMore, loadMore, refresh };
+  return {
+    news,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    currentPage,
+    refresh,
+    setNews // Thêm setter để component có thể cập nhật state nếu cần
+  };
 };
 
 /**
@@ -154,10 +178,10 @@ export const usePosts = () => {
  * @returns Đối tượng chứa thông tin bài viết, tin liên quan và trạng thái tải
  */
 export const useNewsDetail = (slug: string, initialLoad = true) => {
-  const [news, setNews] = useState<Post | null>(null);
+  const [news, setNews] = useState<NewsItemOrPost | null>(null);
   const [loading, setLoading] = useState(initialLoad);
   const [error, setError] = useState<string | null>(null);
-  const [relatedNews, setRelatedNews] = useState<Post[]>([]);
+  const [relatedNews, setRelatedNews] = useState<NewsItemOrPost[]>([]);
 
   useEffect(() => {
     const fetchNewsDetail = async () => {
@@ -168,8 +192,10 @@ export const useNewsDetail = (slug: string, initialLoad = true) => {
         setNews(newsData);
 
         // Fetch related news
-        const relatedData = await newsService.getNewsByCategory(slug);
-        setRelatedNews(relatedData);
+        const response = await newsService.getNewsByCategory(slug);
+        if (response.success && response.data) {
+          setRelatedNews(response.data.items);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi tải chi tiết tin tức');
       } finally {
@@ -182,5 +208,11 @@ export const useNewsDetail = (slug: string, initialLoad = true) => {
     }
   }, [slug, initialLoad]);
 
-  return { news, loading, error, relatedNews };
+  return {
+    news,
+    loading,
+    error,
+    relatedNews,
+    setNews // Expose setter for manual updates if needed
+  };
 };

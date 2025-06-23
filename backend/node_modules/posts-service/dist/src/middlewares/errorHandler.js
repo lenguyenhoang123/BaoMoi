@@ -90,11 +90,7 @@ const errorHandler = (err, req, res, next) => {
     err.status = err.status || 'error';
     // Ghi log lỗi cho môi trường phát triển
     if (process.env.NODE_ENV === 'development') {
-        logger_1.default.error({
-            message: err.message,
-            stack: err.stack,
-            name: err.name,
-        });
+        logger_1.default.error(`[${err.name}] ${err.message}${err.stack ? `\n${err.stack}` : ''}`);
     }
     // Handle specific error types
     if (err.name === 'CastError')
@@ -112,7 +108,7 @@ const errorHandler = (err, req, res, next) => {
         console.error('Error 💥', err);
     }
     else if (process.env.NODE_ENV === 'production') {
-        logger_1.default.error(err);
+        logger_1.default.error(`[${err.name}] ${err.message}${err.stack ? `\n${err.stack}` : ''}`);
     }
     // 2) Gửi phản hồi lỗi
     if (process.env.NODE_ENV === 'development') {

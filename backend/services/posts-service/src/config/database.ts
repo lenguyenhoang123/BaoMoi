@@ -37,9 +37,18 @@ const config: DatabaseConfig = {
       password: process.env.POSTGRES_PASSWORD || '123',
       port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
       max: 20,
+      min: 2,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 5000,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      // Cấu hình hỗ trợ tiếng Việt
+      client_encoding: 'utf8mb4',
+      // Tự động kết nối lại
+      keepAlive: true,
+      // Thời gian sống tối đa của kết nối (ms)
+      maxLifetimeMillis: 3600000, // 1 giờ
+      // Thời gian giữa các lần kiểm tra kết nối (ms)
+      idle_in_transaction_session_timeout: 10000
     };
 
     console.log('🔄 Đang kết nối tới cơ sở dữ liệu...');
@@ -80,9 +89,10 @@ const config: DatabaseConfig = {
   ): Promise<{ rows: T[]; rowCount: number }> {
     if (!pool) {
       await this.init();
-      if (!pool) {
-        throw new Error('Không thể khởi tạo kết nối cơ sở dữ liệu');
-      }
+    }
+    
+    if (!pool) {
+      throw new Error('Không thể khởi tạo kết nối cơ sở dữ liệu');
     }
 
     try {
@@ -116,9 +126,10 @@ const config: DatabaseConfig = {
   async getClient() {
     if (!pool) {
       await this.init();
-      if (!pool) {
-        throw new Error('Database pool is not initialized');
-      }
+    }
+    
+    if (!pool) {
+      throw new Error('Database pool is not initialized');
     }
 
     try {

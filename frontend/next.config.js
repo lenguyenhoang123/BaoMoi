@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
 
+// Cấu hình domains cho phép tải ảnh
+const allowedImageDomains = [
+  'placehold.co',
+  'localhost',
+  '127.0.0.1'
+];
+
 // Lưu lại console gốc
 const originalConsole = { ...console };
 
@@ -157,6 +164,17 @@ const nextConfig = {
         destination: 'http://localhost:3000/api/:path*',
       },
     ];
+  },
+
+  // Cấu hình images
+  images: {
+    domains: allowedImageDomains,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 60, // 1 phút
+    formats: ['image/webp'],
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;"
   },
 
   // Environment variables

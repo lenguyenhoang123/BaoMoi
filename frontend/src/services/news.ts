@@ -1,4 +1,4 @@
-import api from './api';
+import api, { categoryApi } from './api';
 import { AxiosError } from 'axios';
 
 // Định nghĩa các kiểu dữ liệu
@@ -6,7 +6,6 @@ export interface NewsItem {
   id: string;
   title: string;
   slug: string;
-  excerpt: string;
   content: string;
   image_url: string;
   created_at: string;
@@ -92,11 +91,7 @@ const formatPost = (post: unknown): NewsItem => {
   // Type guard để đảm bảo post là object
   const postData = post as Record<string, unknown>;
   
-  // Tạo excerpt từ nội dung
   const content = String(postData.content || '');
-  const excerpt = content 
-    ? content.replace(/<[^>]*>/g, '').substring(0, 150) + '...'
-    : '';
 
   // Xử lý tags
   let tags: string[] = [];
@@ -142,7 +137,7 @@ const formatPost = (post: unknown): NewsItem => {
 
   // Lấy các trường không nằm trong interface NewsItem
   const excludedFields = new Set([
-    'id', 'title', 'slug', 'excerpt', 'content', 'image_url', 'image', 'created_at',
+    'id', 'title', 'slug', 'content', 'image_url', 'image', 'created_at',
     'updated_at', 'published_at', 'is_published', 'is_featured', 'is_hot',
     'view_count', 'category_id', 'category_name', 'author_id', 'author_name', 'tags',
     'category', 'author'
@@ -161,7 +156,7 @@ const formatPost = (post: unknown): NewsItem => {
     id: String(postData.id || ''),
     title: String(postData.title || ''),
     slug: String(postData.slug || ''),
-    excerpt: String(postData.excerpt || excerpt),
+
     content,
     image_url: String(postData.image_url || postData.image || ''),
     created_at: formatDate(postData.created_at),
@@ -198,6 +193,44 @@ const formatPost = (post: unknown): NewsItem => {
 };
 
 export const newsService = {
+  /**
+   * Lấy danh sách bài viết nổi bật
+   * @param params Tham số lọc và phân trang
+   */
+  async getFeaturedPosts(params: {
+    limit?: number;
+    page?: number;
+  } = {}): Promise<NewsItem[]> {
+    try {
+      const { limit = 3, page = 1 } = params;
+      console.log('Fetching featured posts with params:', { limit, page });
+      
+      // Sử dụng endpoint chính và thêm tham số is_featured
+      const response = await api.get<ApiResponse<{ items: NewsItem[]; pagination: Pagination }>>(
+        '/posts',
+        { 
+          params: { 
+            limit, 
+            page,
+            is_featured: true,  // Lọc bài viết nổi bật
+            status: 'published' // Chỉ lấy bài đã xuất bản
+          } 
+        }
+      );
+      
+      console.log('Featured posts response:', response.data);
+      
+      if (response.data && response.data.success && response.data.data) {
+        const { items } = response.data.data;
+        return Array.isArray(items) ? items.map(formatPost) : [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error in getFeaturedPosts:', error);
+      return []; // Trả về mảng rỗng thay vì ném lỗi
+    }
+  },
+
   /**
    * Lấy danh sách tin tức với các tham số tìm kiếm và phân trang
    */
@@ -355,19 +388,105 @@ export const newsService = {
   /**
    * Lấy danh sách danh mục
    */
-  getCategories: async (): Promise<Category[]> => {
+  async getCategories(): Promise<Category[]> {
     try {
-      const response = await api.get('/categories');
-      const data = response.data?.data || response.data || [];
-      return Array.isArray(data) 
-        ? data.map((cat: unknown) => ({
-            id: String((cat as Category).id || ''),
-            name: String((cat as Category).name || ''),
-            slug: String((cat as Category).slug || '')
-          }))
-        : [];
+      // Sử dụng api instance đã được cấu hình sẵn với baseURL
+      const response = await api.get('/categories', {
+        // Thêm timestamp để tránh cache
+        params: { _t: Date.now() },
+        // Xác thực các tham số yêu cầu
+        validateStatus: (status) => status < 500
+      });
+      
+      // Log response để debug
+      console.log('Danh sách danh mục nhận được:', response.data);
+      
+      // Nếu response có status lỗi
+      if (response.status >= 400) {
+        throw new Error(response.data?.message || 'Lỗi khi tải danh sách danh mục');
+      }
+      
+      // Xử lý các định dạng phản hồi khác nhau
+      if (Array.isArray(response.data)) {
+        return response.data as Category[];
+      } else if (response.data && Array.isArray(response.data.data)) {
+        return response.data.data as Category[];
+      } else if (response.data && response.data.items) {
+        return response.data.items as Category[];
+      }
+      
+      console.warn('Định dạng phản hồi không xác định:', response.data);
+      return [];
+      
+    } catch (error: any) {
+      console.error('Lỗi khi lấy danh sách danh mục:', error);
+      
+      // Trả về dữ liệu mẫu nếu API bị lỗi
+      return [
+        { id: '1', name: 'Thể thao', slug: 'the-thao' },
+        { id: '2', name: 'Giải trí', slug: 'giai-tri' },
+        { id: '3', name: 'Công nghệ', slug: 'cong-nghe' },
+      ];
+    }
+  },
+
+  /**
+   * Lấy thông tin chi tiết danh mục
+   */
+  async getCategoryById(id: string): Promise<Category | null> {
+    try {
+      const response = await api.get(`/categories/${id}`);
+      return response.data?.data || response.data || null;
     } catch (error) {
-      throw handleError(error, 'Không thể tải danh sách danh mục');
+      console.error(`Lỗi khi lấy thông tin danh mục ${id}:`, error);
+      return null;
+    }
+  },
+
+  /**
+   * Lấy danh sách bài viết theo danh mục (bao gồm cả bài viết từ danh mục con)
+   */
+  async getPostsByCategory(
+    categoryId: string, 
+    params: { 
+      page?: number; 
+      limit?: number; 
+      includeSubcategories?: boolean 
+    } = {}
+  ): Promise<{ items: NewsItem[]; pagination: Pagination }> {
+    try {
+      const { 
+        page = 1, 
+        limit = 10, 
+        includeSubcategories = true 
+      } = params;
+
+      const response = await api.get('/posts', {
+        params: {
+          category: categoryId,
+          includeSubcategories,
+          page,
+          limit,
+          is_published: true,
+        },
+      });
+
+      const items = Array.isArray(response.data.data) 
+        ? response.data.data.map((item: unknown) => formatPost(item))
+        : [];
+
+      return {
+        items,
+        pagination: response.data.pagination || {
+          page,
+          pageSize: limit,
+          totalItems: response.data.total || 0,
+          totalPages: Math.ceil((response.data.total || 0) / limit)
+        }
+      };
+    } catch (error) {
+      console.error('Lỗi khi lấy bài viết theo danh mục:', error);
+      return { items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 0 } };
     }
   },
 
@@ -422,6 +541,17 @@ export const newsService = {
     try {
       const { page = DEFAULT_PAGE, limit = DEFAULT_PAGE_SIZE } = params;
       
+      console.log('[NewsService] getNewsByCategory - Request:', {
+        categoryId: {
+          value: categoryId,
+          type: typeof categoryId
+        },
+        page,
+        limit,
+        is_published: true,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await api.get('/posts', {
         params: {
           category_id: categoryId,
@@ -431,12 +561,35 @@ export const newsService = {
         },
       });
 
-      const responseData = response.data?.data || response.data || [];
-      const items = (Array.isArray(responseData) ? responseData : []).map(formatPost);
-      const totalItems = response.data?.total || items.length;
-      const totalPages = Math.ceil(totalItems / limit);
+      console.log('[NewsService] getNewsByCategory - Raw Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data ? {
+          hasItems: !!response.data?.data?.items || !!response.data?.items,
+          itemsCount: (response.data?.data?.items || response.data?.items || []).length,
+          pagination: response.data?.pagination || response.data?.data?.pagination
+        } : 'No data',
+        timestamp: new Date().toISOString()
+      });
 
-      return {
+      // Handle both response formats: direct items array or nested data object
+      const responseData = response.data?.data || response.data;
+      const items = Array.isArray(responseData?.items) 
+        ? responseData.items.map(formatPost)
+        : Array.isArray(responseData)
+          ? responseData.map(formatPost)
+          : [];
+          
+      const totalItems = response.data?.pagination?.total || 
+                        response.data?.data?.pagination?.total || 
+                        response.data?.total || 
+                        items.length;
+                        
+      const totalPages = response.data?.pagination?.totalPages || 
+                        response.data?.data?.pagination?.totalPages || 
+                        Math.ceil(totalItems / limit);
+
+      const result = {
         success: true,
         data: {
           items,
@@ -447,7 +600,16 @@ export const newsService = {
             totalPages
           }
         }
-      }
+      };
+
+      console.log('[NewsService] getNewsByCategory - Processed Result:', {
+        itemsCount: items.length,
+        totalItems,
+        totalPages,
+        hasItems: items.length > 0
+      });
+
+      return result;
     } catch (error) {
       throw handleError(error, 'Không thể lấy tin tức theo danh mục');
     }

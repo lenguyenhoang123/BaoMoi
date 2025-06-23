@@ -5,21 +5,18 @@ export interface Post {
     slug: string;
     content: string;
     status: string;
+    category_id?: string | null;
     created_at: Date;
     updated_at: Date;
     image_url?: string | null;
     tags?: string[];
+    category?: any;
 }
 /**
  * Chi tiết bài viết với các thông tin bổ sung
  * Không chứa bất kỳ thông tin liên kết nào với các service khác
  */
 export interface PostWithDetails extends Post {
-    /**
-     * Mô tả ngắn (excerpt) của bài viết
-     * Nếu không có, sẽ tự động tạo từ nội dung
-     */
-    excerpt?: string;
     /**
      * Ảnh đại diện thu nhỏ (thumbnail)
      * Nếu không có, sẽ sử dụng image_url
@@ -36,6 +33,7 @@ export interface CreatePostDto {
     slug: string;
     content: string;
     status: 'draft' | 'published' | 'archived';
+    category_id?: string | null;
     image_url?: string | null;
     tags?: string[];
 }

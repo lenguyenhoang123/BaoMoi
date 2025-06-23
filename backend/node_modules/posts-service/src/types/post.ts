@@ -8,10 +8,12 @@ export interface Post {
   slug: string;                  // Đường dẫn thân thiện SEO
   content: string;               // Nội dung chính của bài viết
   status: string;                // Trạng thái hiện tại: 'draft' | 'published' | 'archived'
+  category_id?: string | null;    // ID của danh mục (liên kết với Categories Service)
   created_at: Date;              // Thời điểm tạo bài viết
   updated_at: Date;              // Thời điểm cập nhật gần nhất
   image_url?: string | null;      // Đường dẫn ảnh đại diện (có thể null)
   tags?: string[];               // Danh sách các tag liên quan
+  category?: any;                // Thông tin đầy đủ của danh mục (sẽ được gán sau)
 }
 
 /**
@@ -19,12 +21,6 @@ export interface Post {
  * Không chứa bất kỳ thông tin liên kết nào với các service khác
  */
 export interface PostWithDetails extends Post {
-  /**
-   * Mô tả ngắn (excerpt) của bài viết
-   * Nếu không có, sẽ tự động tạo từ nội dung
-   */
-  excerpt?: string;
-  
   /**
    * Ảnh đại diện thu nhỏ (thumbnail)
    * Nếu không có, sẽ sử dụng image_url
@@ -44,6 +40,7 @@ export interface CreatePostDto {
   slug: string;                          // Đường dẫn thân thiện SEO (bắt buộc)
   content: string;                       // Nội dung chính (bắt buộc)
   status: 'draft' | 'published' | 'archived'; // Trạng thái bài viết
+  category_id?: string | null;            // ID của danh mục (nếu có)
   image_url?: string | null;              // Đường dẫn ảnh đại diện
   tags?: string[];                       // Danh sách các tag
 }

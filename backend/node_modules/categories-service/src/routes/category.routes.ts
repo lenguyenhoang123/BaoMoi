@@ -61,10 +61,14 @@ const updateCategoryValidation = [
 // ====================
 
 // Lấy tất cả danh mục
-router.get('/', CategoryController.getAllCategories);
+router.get('/', (req: Request, res: Response, next: NextFunction) => {
+  return (CategoryController.getAllCategories as any)(req, res, next);
+});
 
 // Lấy danh mục theo ID
-router.get('/:id', CategoryController.getCategoryById);
+router.get('/:id', (req: Request, res: Response, next: NextFunction) => {
+  return (CategoryController.getCategoryById as any)(req, res, next);
+});
 
 // ====================
 // Protected routes (Yêu cầu xác thực)

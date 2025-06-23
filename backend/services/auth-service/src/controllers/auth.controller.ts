@@ -5,12 +5,13 @@ import authService from '../services/auth.service';
 import logger from '../utils/logger';
 import type { IRegisterRequest } from '../interfaces/auth.interface';
 
-// Hằng số regex cho email  
+// Biểu thức chính quy kiểm tra định dạng email
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export class AuthController {
   /**
-   * Lấy thông tin người dùng hiện tại
+   * Lấy thông tin người dùng đang đăng nhập
+   * @returns Thông tin người dùng nếu thành công
    */
   public static async getCurrentUser(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
@@ -36,11 +37,12 @@ export class AuthController {
   }
 
   /**
-   * Đăng xuất người dùng
+   * Xử lý yêu cầu đăng xuất
+   * @returns Thông báo đăng xuất thành công
    */
   public static async logout(_req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
-      // Ở đây chúng ta có thể thêm logic để vô hiệu hóa token nếu cần
+      // Có thể thêm logic vô hiệu hóa token tại đây nếu cần
       return res.status(200).json({
         success: true,
         message: 'Đăng xuất thành công'
@@ -107,12 +109,12 @@ export class AuthController {
    */
   public static async register(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
     try {
-      logger.info('🔵 [REGISTER] Nhận yêu cầu đăng ký mới:', { body: req.body });
+      logger.info(`🔵 [REGISTER] Nhận yêu cầu đăng ký mới: ${JSON.stringify({ body: req.body })}`);
 
       // Validate request
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        logger.warn('🔴 [REGISTER] Lỗi validate dữ liệu:', { errors: errors.array() });
+        logger.warn(`🔴 [REGISTER] Lỗi validate dữ liệu: ${JSON.stringify({ errors: errors.array() })}`);
         return res.status(400).json({
           success: false,
           message: 'Lỗi xác thực dữ liệu',
@@ -124,7 +126,7 @@ export class AuthController {
 
       // Kiểm tra định dạng email
       if (!EMAIL_REGEX.test(email)) {
-        logger.warn('🔴 [REGISTER] Định dạng email không hợp lệ:', email);
+        logger.warn(`🔴 [REGISTER] Định dạng email không hợp lệ: ${email}`);
         return res.status(400).json({
           success: false,
           message: 'Định dạng email không hợp lệ'
@@ -163,7 +165,7 @@ export class AuthController {
       // Kiểm tra xem email đã tồn tại chưa
       const existingUser = await User.findOne({ where: { email } });
       if (existingUser) {
-        logger.warn('🔴 [REGISTER] Email đã được đăng ký:', email);
+        logger.warn(`🔴 [REGISTER] Email đã được đăng ký: ${email}`);
         return res.status(400).json({
           success: false,
           message: 'Email này đã được đăng ký. Vui lòng sử dụng email khác.'
@@ -179,14 +181,14 @@ export class AuthController {
           full_name: full_name || email.split('@')[0]
         });
 
-        logger.info('🟢 [REGISTER] Đăng ký thành công, yêu cầu xác thực email:', email);
+        logger.info(`🟢 [REGISTER] Đăng ký thành công, yêu cầu xác thực email: ${email}`);
         return res.status(201).json({
           success: true,
           message: 'Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.',
           requiresVerification: true
         });
       } catch (error: any) {
-        logger.error('🔴 [REGISTER] Lỗi khi đăng ký:', error);
+        logger.error(`🔴 [REGISTER] Lỗi khi đăng ký: ${error.message || error}`);
 
         if (error.name === 'SequelizeUniqueConstraintError') {
           return res.status(400).json({
@@ -201,7 +203,7 @@ export class AuthController {
         });
       }
     } catch (error) {
-      logger.error('🔴 [REGISTER] Lỗi không mong muốn trong quá trình đăng ký:', error);
+      logger.error(`🔴 [REGISTER] Lỗi không mong muốn trong quá trình đăng ký: ${error instanceof Error ? error.message : String(error)}`);
       next(error);
     }
   }
@@ -340,7 +342,7 @@ export class AuthController {
         message: 'Đã gửi lại email xác thực. Vui lòng kiểm tra hộp thư đến của bạn.'
       });
     } catch (error) {
-      logger.error('Lỗi trong quá trình gửi lại email xác thực:', error);
+      logger.error(`Lỗi trong quá trình gửi lại email xác thực: ${error instanceof Error ? error.message : String(error)}`);
       next(error);
     }
   }

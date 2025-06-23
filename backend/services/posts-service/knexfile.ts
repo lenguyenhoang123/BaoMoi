@@ -7,13 +7,13 @@ dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 module.exports = {
   development: {
-    client: 'pg',
+    client: 'postgresql',
     connection: {
-      host: process.env.POSTGRES_HOST || 'localhost',
-      port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
+      database: process.env.POSTGRES_DB || 'posts_db',
       user: process.env.POSTGRES_USER || 'postgres',
       password: process.env.POSTGRES_PASSWORD || '123',
-      database: process.env.POSTGRES_DB || 'posts_db',
+      host: process.env.POSTGRES_HOST || 'localhost',
+      port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
     },
     migrations: {
       directory: './src/migrations',
@@ -21,6 +21,7 @@ module.exports = {
     },
     seeds: {
       directory: './src/seeds',
+      extension: 'ts',
     },
   },
   production: {

@@ -58,7 +58,6 @@ export interface Post {
   tags: string[];
   
   // Các trường tính toán hoặc từ các bảng liên quan
-  excerpt?: string;              // Cắt từ content nếu cần
   isPublished?: boolean;         // = status === 'published'
   
   // Quan hệ
@@ -94,10 +93,12 @@ export interface CreatePostRequest {
   status?: PostStatus;
   image_url?: string;
   tags?: string[];
+  category_id?: string | number | null;
 }
 
 export interface UpdatePostRequest extends Partial<CreatePostRequest> {
   id: string;
+  category_id?: string | number | null;
 }
 
 export interface PostListParams {

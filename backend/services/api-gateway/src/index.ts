@@ -1,427 +1,92 @@
 import express from 'express';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import cookieParser from 'cookie-parser';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import path from 'path';
-import fs from 'fs';
-import winston from 'winston';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { setupSimpleProxy } from './simple-proxy.js';
 
-// Configure __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-dotenv.config();
-
-const logDir = path.join(process.cwd(), 'logs');
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
+// Định nghĩa kiểu cho request với body
+interface RequestWithBody extends express.Request {
+  body: any;
+  originalUrl: string;
+  method: string;
 }
 
-// Configure logger
-const logger = winston.createLogger({
-  level: 'debug',
-  format: winston.format.combine(
-    winston.format.timestamp({
-      format: 'YYYY-MM-DD HH:mm:ss'
-    }),
-    winston.format.errors({ stack: true }),
-    winston.format.splat(),
-    winston.format.json()
-  ),
-  defaultMeta: { service: 'api-gateway' },
-  transports: [
-    new winston.transports.File({
-      filename: path.join(logDir, 'error.log'),
-      level: 'error'
-    }),
-    new winston.transports.File({
-      filename: path.join(logDir, 'combined.log')
-    })
-  ]
-});
-
-// If we're not in production then log to the console as well
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
-  }));
-}
-
-// Tải các biến môi trường từ file .env
-dotenv.config();
+// Cấu hình
+const PORT = process.env.PORT || 3000;
+const POSTS_SERVICE_URL = process.env.POSTS_SERVICE_URL || 'http://localhost:3002';
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:3001';
 
 // Khởi tạo ứng dụng Express
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Xử lý preflight request
-app.options('*', cors({
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Access-Token', 'X-Refresh-Token', 'cache-control', 'pragma']
+// Middleware cơ bản
+app.use(helmet());
+app.use(cors({
+  origin: 'http://localhost:3004', // Chỉ chấp nhận yêu cầu từ frontend
+  credentials: true, // Cho phép gửi credentials (cookies, xác thực HTTP)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Total-Count']
 }));
-
-// Cấu hình CORS (Cross-Origin Resource Sharing)
-const corsOptions = {
-  origin: (origin, callback) => {
-    const allowedOrigins = [
-      'http://localhost:3000',  // API Gateway
-      'http://localhost:3004',  // Ứng dụng Frontend
-      'http://localhost:3002',  // Dịch vụ Bài viết
-      'http://localhost:3005',  // Dịch vụ Xác thực
-      'http://localhost:3008',  // Dịch vụ Bình luận
-      'http://localhost:3009',  // Dịch vụ Danh mục
-    ];
-
-    // Cho phép request không có origin (như từ Postman, curl, v.v.)
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,  // Cho phép gửi cookie qua CORS
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'X-Access-Token',
-    'X-Refresh-Token',
-    'cache-control',
-    'pragma',
-    'Accept',
-    'Origin',
-    'X-Forwarded-For',
-    'X-Forwarded-Proto',
-    'X-Forwarded-Port'
-  ],
-  exposedHeaders: [
-    'X-Access-Token',
-    'X-Refresh-Token',
-    'Content-Type',
-    'Content-Length',
-    'ETag',
-    'Date',
-    'Connection'
-  ],
-  maxAge: 86400, // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
-
-app.use(cors(corsOptions));
-
-// Các middleware cơ bản
-app.use(express.json());  // Phân tích dữ liệu JSON từ request
-app.use(express.urlencoded({ extended: true }));  // Phân tích dữ liệu form-urlencoded
-app.use(cookieParser());  // Xử lý cookie
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'UP',
-    timestamp: new Date().toISOString(),
-    service: 'API Gateway',
-    version: '1.0.0'
-  });
-});
-
-// Middleware parse JSON body
+app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
-// Middleware ghi log chi tiết các request
-app.use((req, res, next) => {
-  console.log('\n=== NEW REQUEST ===');
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-
-  // Lưu lại body gốc để log
-  const originalSend = res.send;
-
-  (res as any).send = function (body: any) {
-    console.log('Response Status Code:', res.statusCode);
-    console.log('Response Headers:', JSON.stringify(res.getHeaders(), null, 2));
-    console.log('Response Body:', body);
-    return originalSend.call(this, body);
-  };
-
-  next();
+// Health check
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
-// Cấu hình proxy cho Dịch vụ Xác thực
-const authProxy = createProxyMiddleware({
-  target: process.env.AUTH_SERVICE_URL || 'http://localhost:3005',
-  changeOrigin: true,
-  pathRewrite: {
-    '^/api/auth': '/auth'  // Chuyển /api/auth/... thành /auth/...
-    // Giữ nguyên /auth
-  },
-  ws: true,
-  logLevel: 'debug',
-  secure: false,
-  onProxyReq: (proxyReq, req: any, res: any) => {
-    console.log('\n=== PROXY REQUEST ===');
-    console.log(`[${new Date().toISOString()}] Forwarding: ${req.method} ${req.originalUrl}`);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+// Cấu hình proxy
+setupSimpleProxy(app);
 
-    // Thêm header Content-Type nếu chưa có
-    if (!proxyReq.getHeader('content-type')) {
-      proxyReq.setHeader('Content-Type', 'application/json');
-    }
+// Các proxy đã được đăng ký trong setupSimpleProxy
 
-    // Nếu có body, gửi lại body
-    if (req.body) {
-      const bodyData = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onProxyRes: (proxyRes, req: any, res: any) => {
-    console.log('\n=== PROXY RESPONSE ===');
-    console.log(`[${new Date().toISOString()}] Received response for: ${req.method} ${req.originalUrl}`);
-    console.log('Status Code:', proxyRes.statusCode);
+// Các route khác có thể thêm vào đây
 
-    // Lưu lại để đọc body
-    const originalProxyData: Buffer[] = [];
-    proxyRes.on('data', (chunk: Buffer) => {
-      originalProxyData.push(chunk);
-    });
-
-    proxyRes.on('end', () => {
-      const body = Buffer.concat(originalProxyData).toString();
-      if (body) {
-        console.log('Response Body:', body);
-      }
-    });
-  },
-  onError: (err: any, req: any, res: any) => {
-    console.error('\n=== PROXY ERROR ===');
-    console.error(`[${new Date().toISOString()}] Lỗi khi chuyển tiếp yêu cầu đến Auth Service`);
-    console.error('Error:', err);
-
-    if (!res.headersSent) {
-      const errorResponse: any = {
-        success: false,
-        message: 'Lỗi kết nối đến dịch vụ xác thực',
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-      };
-
-      if (process.env.NODE_ENV === 'development') {
-        errorResponse.details = {
-          code: err.code || 'UNKNOWN_ERROR',
-          stack: err.stack
-        };
-      }
-
-      res.status(502).json(errorResponse);
-    }
-  }
-});
-
-// Sử dụng proxy cho các route xác thực
-app.use('/api/auth', authProxy);
-app.use('/auth', authProxy);
-
-// Cấu hình proxy cho các dịch vụ
-interface ServiceConfig {
-  path: string;
-  target: string;
-  pathRewrite?: {
-    [key: string]: string;
-  };
-  methods?: string[];
-  changeOrigin?: boolean;
-  onProxyReq?: (proxyReq: any, req: any, res: any) => void;
-  onError?: (err: any, req: any, res: any) => void;
-}
-
-const createServiceProxy = (config: ServiceConfig) => {
-  const { path, target, pathRewrite, methods = ['GET'] } = config;
-
-  const proxyOptions: any = {
-    target,
-    changeOrigin: true,
-    pathRewrite: pathRewrite || {},
-    logLevel: 'debug',
-    methods,
-    onProxyReq: (proxyReq: any, req: any, res: any) => {
-      // Log request details
-      logger.info('Forwarding request', {
-        method: req.method,
-        originalUrl: req.originalUrl,
-        target: `${target}${req.path}`,
-        headers: req.headers,
-        body: req.body || {},
-        timestamp: new Date().toISOString()
-      });
-
-      // Forward all headers from the original request
-      const headersToForward = [
-        'authorization',
-        'content-type',
-        'x-requested-with',
-        'x-access-token',
-        'x-refresh-token',
-        'cache-control',
-        'pragma',
-        'accept',
-        'origin'
-      ];
-
-      headersToForward.forEach(header => {
-        if (req.headers[header]) {
-          proxyReq.setHeader(header, req.headers[header]);
-        }
-      });
-
-      // For PATCH and OPTIONS requests, ensure CORS headers are set
-      if (req.method === 'PATCH' || req.method === 'OPTIONS') {
-        logger.debug('Setting CORS headers for PATCH/OPTIONS request');
-        proxyReq.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        proxyReq.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Refresh-Token, cache-control, pragma, accept, origin');
-        proxyReq.setHeader('Access-Control-Allow-Credentials', 'true');
-        proxyReq.setHeader('Access-Control-Max-Age', '86400');
-      }
-
-      // Nếu là request PATCH và có body, đảm bảo gửi body đi
-      if (req.method === 'PATCH' && req.body) {
-        const bodyData = JSON.stringify(req.body);
-        proxyReq.setHeader('Content-Type', 'application/json');
-        proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-        proxyReq.write(bodyData);
-        logger.debug('PATCH request body sent', {
-          contentLength: Buffer.byteLength(bodyData),
-          body: req.body
-        });
-      }
-    },
-    onProxyRes: (proxyRes: any, req: any, res: any) => {
-      // Log response details
-      logger.info('Received response', {
-        method: req.method,
-        originalUrl: req.originalUrl,
-        statusCode: proxyRes.statusCode,
-        statusMessage: proxyRes.statusMessage,
-        headers: proxyRes.headers,
-        timestamp: new Date().toISOString()
-      });
-
-      // Add CORS headers to the response
-      const origin = req.headers.origin || '*';
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Access-Token, X-Refresh-Token, cache-control, pragma');
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-      // Copy all headers from the proxied response
-      Object.keys(proxyRes.headers).forEach(key => {
-        res.setHeader(key, proxyRes.headers[key]);
-      });
-    },
-    onError: (err: any, req: any, res: any) => {
-      logger.error('Proxy error', {
-        method: req.method,
-        originalUrl: req.originalUrl,
-        error: err.message,
-        stack: err.stack,
-        headers: req.headers,
-        timestamp: new Date().toISOString()
-      });
-
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: 'Lỗi kết nối đến dịch vụ',
-          error: err.message,
-          details: process.env.NODE_ENV === 'development' ? err.stack : undefined
-        });
-      }
-    }
-  };
-
-  // Create and return the proxy middleware
-  return createProxyMiddleware(path, proxyOptions);
-};
-
-// Cấu hình các dịch vụ
-const services: ServiceConfig[] = [
-  // Posts service
-  {
-    path: '/api/posts',
-    target: 'http://localhost:3002',
-    pathRewrite: { '^/api': '' }, // Giữ nguyên path sau /api
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    changeOrigin: true,
-    onProxyReq: (proxyReq, req: any, res: any) => {
-      console.log(`[API Gateway] Proxying ${req.method} ${req.originalUrl} to ${proxyReq.path}`);
-    },
-    onError: (err: any, req: any, res: any) => {
-      console.error('[API Gateway] Proxy error:', err);
-      res.status(500).json({
-        success: false,
-        message: 'Lỗi kết nối đến dịch vụ bài viết',
-        error: err.message
-      });
-    }
-  },
-  // Categories service
-  {
-    path: '/api/categories',
-    target: 'http://localhost:3009',
-    pathRewrite: { '^/api': '' },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-  },
-  // Auth service
-  {
-    path: '/api/auth',
-    target: 'http://localhost:3005',
-    pathRewrite: { '^/api': '' },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-  },
-  // Comments service
-  {
-    path: '/api/comments',
-    target: 'http://localhost:3008',
-    pathRewrite: { '^/api': '' },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
-  },
-  // Tags endpoints (handled by posts service)
-  {
-    path: '/api/tags',
-    target: 'http://localhost:3002',
-    pathRewrite: { '^/api/tags': '/api/tags' },
-    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS']
-  }
-];
-
-// Khởi tạo proxy cho từng dịch vụ
-services.forEach(service => {
-  const proxy = createServiceProxy(service);
-  app.use(service.path, proxy);
-  console.log(`Proxy created for ${service.path} -> ${service.target}`);
+// Xử lý 404
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Not Found',
+    error: 'The requested resource was not found'
+  });
 });
 
 // Xử lý lỗi toàn cục
 app.use((err: any, req: any, res: any, next: any) => {
-  console.error('[API-Gateway] Lỗi:', err);
+  console.error('Unhandled error:', err);
   res.status(500).json({
     success: false,
-    message: 'Lỗi máy chủ nội bộ',
-    error: process.env.NODE_ENV === 'development' ? err.message : {}
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
   });
 });
 
-// Khởi động máy chủ
-app.listen(PORT, () => {
-  console.log(`[API-Gateway] Máy chủ đang chạy tại cổng ${PORT}`);
+// Khởi động server
+const server = app.listen(PORT, () => {
+  console.log(`\n🚀 API Gateway đang chạy trên cổng ${PORT}`);
+  console.log(`🔗 Posts Service: ${POSTS_SERVICE_URL}`);
+  console.log(`🔗 Auth Service: ${AUTH_SERVICE_URL}\n`);
 });
+
+// Xử lý tín hiệu dừng
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Nhận được tín hiệu SIGTERM. Đang tắt server...');
+  server.close(() => {
+    console.log('✅ Server đã dừng');
+    process.exit(0);
+  });
+});
+
+// Xử lý các lỗi chưa được bắt
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection tại:', promise, 'Lý do:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+export { app, server };

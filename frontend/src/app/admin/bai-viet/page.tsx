@@ -25,7 +25,7 @@ import {
   PlusOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
-import { postApi } from '@/services/api';
+import { postApi, categoryApi } from '@/services/api-client';
 import { Post, PostStatus } from '@/types/post';
 import { debounce } from 'lodash';
 import Link from 'next/link';
@@ -109,18 +109,19 @@ const PostManagementPage = () => {
     limit?: number;
     search?: string;
     status?: string;
-  } = {}) => {
+  } = {}): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await postApi.getPosts({
-        page: params.page || pagination.current,
-        limit: params.limit || pagination.pageSize,
-        search: params.search || searchText.trim() || undefined,
-        status: params.status || (statusFilter === 'all' ? undefined : statusFilter),
+        page: params.page ?? pagination.current,
+        limit: params.limit ?? pagination.pageSize,
+        search: params.search ?? searchText.trim() ?? undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
         sortBy: 'created_at',
-        sortOrder: 'desc'
+        sortOrder: 'desc',
+        include: 'category'
       });
 
       // Chuyển đổi dữ liệu để đảm bảo tương thích
@@ -144,9 +145,6 @@ const PostManagementPage = () => {
       const errorMessage = error.response?.data?.message ||
         (error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải danh sách bài viết');
       message.error(typeof errorMessage === 'string' ? errorMessage : 'Đã xảy ra lỗi không xác định');
-    } finally {
-      setLoading(false);
-      setIsRefreshing(false);
     }
   }, [pagination.current, pagination.pageSize, searchText, statusFilter]);
 
@@ -166,22 +164,49 @@ const PostManagementPage = () => {
           search: searchText.trim() || undefined,
           status: statusFilter === 'all' ? undefined : statusFilter,
           sortBy: 'created_at',
-          sortOrder: 'desc'
+          sortOrder: 'desc',
+          include: 'category' // Thêm include để lấy thông tin category
         });
 
         if (!isMounted) return;
 
         console.log('Dữ liệu bài viết từ API:', response);
 
-        // Chuyển đổi dữ liệu để đảm bảo tương thích
-        const formattedData = (response.data || []).map((post: any) => ({
-          ...post,
-          key: post.id,
-          createdAt: post.created_at || post.createdAt,
-          updatedAt: post.updated_at || post.updatedAt,
-          image_url: post.image_url || post.image,
-          tags: post.tags || []
-        }));
+        // Lấy danh sách categories từ API
+        const categoriesResponse = await categoryApi.getCategories({ limit: 1000 });
+        const categories = Array.isArray(categoriesResponse.data) ? categoriesResponse.data : [];
+        
+        // Tạo map để ánh xạ category_id -> category name
+        const categoriesMap = new Map(
+          categories.map((cat: any) => [cat.id, cat.name || cat.title || `Danh mục ${cat.id}`])
+        );
+        
+        console.log('Danh sách categories:', Array.from(categoriesMap.entries()));
+
+        // Chuyển đổi dữ liệu bài viết
+        const formattedData = (response.data || []).map((post: any) => {
+          // Lấy category_id từ post
+          const categoryId = post.category_id || (post.category?.id || '');
+          
+          // Lấy tên danh mục từ categoriesMap
+          const categoryName = categoryId 
+            ? (categoriesMap.get(categoryId) || `Danh mục ${categoryId}`)
+            : 'Chưa phân loại';
+
+
+          return {
+            ...post,
+            key: post.id,
+            createdAt: post.created_at || post.createdAt,
+            updatedAt: post.updated_at || post.updatedAt,
+            image_url: post.image_url || post.image,
+            tags: post.tags || [],
+            category: {
+              id: post.category_id || '',
+              name: categoryName
+            }
+          };
+        });
 
         console.log('Dữ liệu đã định dạng:', formattedData);
 
@@ -263,6 +288,28 @@ const PostManagementPage = () => {
 
   // Cấu hình cột cho bảng
   const columns = [
+    {
+      title: 'Danh mục',
+      dataIndex: 'category',
+      key: 'category',
+      width: 200,
+      render: (category: any) => {
+        // Nếu không có thông tin danh mục
+        if (!category) {
+          return <span className="text-gray-400">Chưa phân loại</span>;
+        }
+
+        // Chỉ hiển thị tên danh mục
+        const displayName = category.name || category.title || 
+                         (typeof category === 'string' ? category : 'Danh mục');
+        
+        return (
+          <span className="text-blue-600">
+            {displayName}
+          </span>
+        );
+      },
+    },
     {
       title: 'Ảnh',
       dataIndex: 'image_url',

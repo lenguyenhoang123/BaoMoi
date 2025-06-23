@@ -139,8 +139,8 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// Register category routes with API base path
-const API_PREFIX = '/api/categories';
+// Register category routes without /api prefix since API Gateway will add it
+const API_PREFIX = '/categories';
 app.use(API_PREFIX, categoryRoutes);
 
 // Health check endpoint
@@ -205,11 +205,35 @@ app.get(`${BASE_PATH}/test-db`, async (_req: Request, res: Response) => {
 });
 
 // API Routes
-app.use(`${BASE_PATH}`, categoryRoutes);
+// Đăng ký routes với base path
+console.log(`Đăng ký routes với BASE_PATH: ${BASE_PATH}`);
 
-// Root route
+// Route gốc
 app.get('/', (_req: Request, res: Response) => {
-  res.redirect('/api');
+  res.json({
+    service: 'Categories Service',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    endpoints: [
+      { method: 'GET', path: '/health', description: 'Health check' },
+      { method: 'GET', path: '/categories', description: 'Get all categories' },
+      { method: 'GET', path: '/categories/:id', description: 'Get category by ID' },
+    ]
+  });
+});
+
+// Health check endpoint
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok', service: 'categories-service', timestamp: new Date().toISOString() });
+});
+
+// API routes
+app.use('', categoryRoutes);
+
+// Test route
+app.get('/test', (_req: Request, res: Response) => {
+  res.json({ message: 'Test endpoint is working', timestamp: new Date().toISOString() });
 });
 
 // 404 handler

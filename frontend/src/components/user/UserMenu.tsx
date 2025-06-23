@@ -128,38 +128,46 @@ export default function UserMenu() {
       
       {/* Các mục menu */}
       <div className="py-1">
-        <Link 
-          href="/admin/bai-viet/them-moi" 
-          className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
-          onClick={() => setIsOpen(false)}
-        >
-          <div className="p-1.5 mr-3 rounded-md bg-red-50 group-hover/item:bg-red-100 transition-colors">
-            <Plus className="h-4 w-4 text-red-600" />
-          </div>
-          <span className="group-hover/item:text-red-600 font-medium">Tạo bài viết mới</span>
-        </Link>
+        {/* Chỉ hiển thị cho admin và editor */}
+        {(user.role === 'admin' || user.role === 'editor') && (
+          <>
+            <Link 
+              href="/admin/bai-viet/them-moi" 
+              className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <div className="p-1.5 mr-3 rounded-md bg-red-50 group-hover/item:bg-red-100 transition-colors">
+                <Plus className="h-4 w-4 text-red-600" />
+              </div>
+              <span className="group-hover/item:text-red-600 font-medium">Tạo bài viết mới</span>
+            </Link>
+            
+            <Link 
+              href="/admin/bai-viet" 
+              className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <div className="p-1.5 mr-3 rounded-md bg-blue-50 group-hover/item:bg-blue-100 transition-colors">
+                <FileText className="h-4 w-4 text-blue-600" />
+              </div>
+              <span className="group-hover/item:text-blue-600 font-medium">Quản lý bài viết</span>
+            </Link>
+          </>
+        )}
         
-        <Link 
-          href="/admin/bai-viet" 
-          className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
-          onClick={() => setIsOpen(false)}
-        >
-          <div className="p-1.5 mr-3 rounded-md bg-blue-50 group-hover/item:bg-blue-100 transition-colors">
-            <FileText className="h-4 w-4 text-blue-600" />
-          </div>
-          <span className="group-hover/item:text-blue-600 font-medium">Quản lý bài viết</span>
-        </Link>
-        
-        <Link 
-          href="/admin/cai-dat" 
-          className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
-          onClick={() => setIsOpen(false)}
-        >
-          <div className="p-1.5 mr-3 rounded-md bg-amber-50 group-hover/item:bg-amber-100 transition-colors">
-            <Settings className="h-4 w-4 text-amber-600" />
-          </div>
-          <span className="group-hover/item:text-amber-600 font-medium">Cài đặt</span>
-        </Link>
+        {/* Chỉ hiển thị cho admin */}
+        {user.role === 'admin' && (
+          <Link 
+            href="/admin/cai-dat" 
+            className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 group/item transition-colors"
+            onClick={() => setIsOpen(false)}
+          >
+            <div className="p-1.5 mr-3 rounded-md bg-amber-50 group-hover/item:bg-amber-100 transition-colors">
+              <Settings className="h-4 w-4 text-amber-600" />
+            </div>
+            <span className="group-hover/item:text-amber-600 font-medium">Cài đặt</span>
+          </Link>
+        )}
         
         {/* Thêm mục Quản lý người dùng nếu là admin */}
         {user.role === 'admin' && (

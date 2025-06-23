@@ -12,7 +12,7 @@ declare class PostService {
      * Tạo slug từ tiêu đề bài viết
      */
     private generateSlug;
-    createPost(data: CreatePostDto, authorId: string): Promise<Post>;
+    createPost(data: CreatePostDto): Promise<Post>;
     /**
      * Cập nhật bài viết đã tồn tại
      */

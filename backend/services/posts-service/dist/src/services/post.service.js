@@ -17,39 +17,31 @@ class PostService {
             .replace(/--+/g, '-')
             .trim();
     }
-    async createPost(data, authorId) {
+    async createPost(data) {
         const client = await database_1.default.getClient();
         try {
-            await client.query('BEGIN');
-            // Tạo slug nếu chưa có
-            const slug = data.slug || this.generateSlug(data.title);
+            await client.query('BEGIN', []);
+            // Tạo slug từ tiêu đề
+            const slug = this.generateSlug(data.title);
             // Thêm bài viết mới
-            const query = `
-        INSERT INTO posts (
-          title, content, slug, status, 
-          image_url, tags
-        ) 
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *`;
-            const result = await client.query({
-                text: query,
-                values: [
-                    data.title,
-                    data.content || '',
-                    slug,
-                    data.status || 'draft',
-                    data.image_url || null,
-                    data.tags ? JSON.stringify(data.tags) : '[]'
-                ]
-            });
-            const post = result.rows[0];
-            await client.query('COMMIT');
-            return post;
+            const result = await client.query(`INSERT INTO posts (title, slug, content, status, image_url, tags, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+         RETURNING *`, [
+                data.title,
+                slug,
+                data.content,
+                data.status || 'draft',
+                data.image_url || null,
+                data.tags ? JSON.stringify(data.tags) : null
+            ]);
+            const newPost = result.rows[0];
+            await client.query('COMMIT', []);
+            return newPost;
         }
         catch (error) {
-            await client.query('ROLLBACK');
-            logger_1.default.error('Error creating post:', error);
-            throw error;
+            await client.query('ROLLBACK', []);
+            console.error('Error creating post:', error);
+            throw new Error('Failed to create post');
         }
         finally {
             client.release();
@@ -61,7 +53,7 @@ class PostService {
     async updatePost(id, data) {
         const client = await database_1.default.getClient();
         try {
-            await client.query('BEGIN');
+            await client.query('BEGIN', []);
             // Xây dựng câu query động
             const updates = [];
             const values = [];
@@ -103,23 +95,20 @@ class PostService {
         WHERE id = $${paramIndex}
         RETURNING *
       `;
-            const result = await client.query({
-                text: query,
-                values: values
-            });
+            const result = await client.query(query, values);
             const updatedPost = result.rows[0];
             if (!result.rows[0]) {
-                await client.query('ROLLBACK');
+                await client.query('ROLLBACK', []);
                 return null;
             }
-            await client.query('COMMIT');
+            await client.query('COMMIT', []);
             // Lấy lại thông tin đầy đủ của bài viết
             const fullPost = await this.getPostById(id);
             return fullPost;
         }
         catch (error) {
-            await client.query('ROLLBACK');
-            logger_1.default.error('Error updating post:', error);
+            await client.query('ROLLBACK', []);
+            console.error('Error updating post:', error);
             throw new Error('Failed to update post');
         }
         finally {
@@ -132,15 +121,21 @@ class PostService {
     async deletePost(id) {
         const client = await database_1.default.getClient();
         try {
-            await client.query('BEGIN');
-            // Delete the post
-            const result = await client.query('DELETE FROM posts WHERE id = $1 RETURNING id', [id]);
-            await client.query('COMMIT');
-            return result.rowCount ? result.rowCount > 0 : false;
+            await client.query('BEGIN', []);
+            // Xóa các bản ghi liên quan trong bảng post_categories
+            await client.query('DELETE FROM post_categories WHERE post_id = $1', [id]);
+            // Xóa bài viết
+            const result = await client.query('DELETE FROM posts WHERE id = $1 RETURNING *', [id]);
+            if (result.rowCount === 0) {
+                await client.query('ROLLBACK', []);
+                return false;
+            }
+            await client.query('COMMIT', []);
+            return true;
         }
         catch (error) {
-            await client.query('ROLLBACK');
-            logger_1.default.error('Error deleting post:', error);
+            await client.query('ROLLBACK', []);
+            console.error('Error deleting post:', error);
             throw new Error('Failed to delete post');
         }
         finally {

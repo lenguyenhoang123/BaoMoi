@@ -10,7 +10,7 @@ import { Op } from 'sequelize';
 import crypto from 'crypto';
 import { AuthUser } from '../middlewares/authorization.middleware';
 
-// Token payload interface
+// Định nghĩa interface cho dữ liệu token
 export interface ITokenPayload extends Omit<AuthUser, 'id'> {
   id: string;
   full_name: string;
@@ -32,7 +32,10 @@ interface IAuthService {
 
 class AuthService implements IAuthService {
   /**
-   * Middleware kiểm tra quyền admin
+   * Middleware xác thực quyền quản trị viên
+   * @param req - Đối tượng request từ Express
+   * @param res - Đối tượng response từ Express
+   * @param next - Hàm chuyển tiếp request
    */
   public isAdmin(req: Request, res: Response, next: NextFunction): void {
     if (req.user && req.user.role === 'admin') {
@@ -46,7 +49,10 @@ class AuthService implements IAuthService {
   }
 
   /**
-   * Đăng ký tài khoản mới
+   * Xử lý đăng ký tài khoản người dùng mới
+   * @param userData - Thông tin đăng ký người dùng
+   * @returns Thông tin người dùng đã đăng ký và trạng thái xác thực
+   * @throws Lỗi nếu email đã tồn tại hoặc dữ liệu không hợp lệ
    */
   public async register(userData: IRegisterRequest): Promise<{ user: User; requiresVerification: boolean }> {
     try {
@@ -119,7 +125,7 @@ class AuthService implements IAuthService {
         requiresVerification: true
       };
     } catch (error) {
-      logger.error('Lỗi khi đăng ký người dùng:', error);
+      logger.error(`Lỗi khi đăng ký người dùng: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -169,7 +175,7 @@ class AuthService implements IAuthService {
         token 
       };
     } catch (error) {
-      logger.error('Lỗi khi xác thực email:', error);
+      logger.error(`Lỗi khi xác thực email: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
@@ -216,7 +222,7 @@ class AuthService implements IAuthService {
         message: 'Xác thực email thành công. Bây giờ bạn có thể đăng nhập.'
       };
     } catch (error) {
-      logger.error('Lỗi xác thực email bằng token:', error);
+      logger.error(`Lỗi xác thực email bằng token: ${error instanceof Error ? error.message : String(error)}`);
       
       if (error instanceof jwt.TokenExpiredError) {
         return { success: false, message: 'Token xác thực đã hết hạn. Vui lòng yêu cầu gửi lại email xác thực.' };
@@ -236,7 +242,7 @@ class AuthService implements IAuthService {
    */
   public async resendOtp(email: string): Promise<{ success: boolean; message: string }> {
     try {
-      logger.info(`[AUTH SERVICE] Yêu cầu gửi lại OTP cho email: ${email}`);
+      logger.info('[AUTH SERVICE] Yêu cầu gửi lại OTP cho email: ' + email);
       
       // Tìm người dùng chưa xác thực email
       const user = await User.findOne({ 
@@ -282,7 +288,7 @@ class AuthService implements IAuthService {
           otp
         );
         
-        logger.info(`[AUTH SERVICE] Đã gửi lại mã OTP đến email: ${user.email}`);
+        logger.info('[AUTH SERVICE] Đã gửi lại mã OTP đến email: ' + user.email);
       
       return { 
         success: true, 
@@ -290,11 +296,11 @@ class AuthService implements IAuthService {
       };
       } catch (emailError) {
         const errorMsg = 'Có lỗi xảy ra khi gửi mã OTP. Vui lòng thử lại sau.';
-        logger.error(`[AUTH SERVICE] ${errorMsg}`, emailError);
+        logger.error('[AUTH SERVICE] ' + errorMsg + ' ' + (emailError instanceof Error ? emailError.message : String(emailError)));
         throw new Error(errorMsg);
       }
     } catch (error) {
-      logger.error('[AUTH SERVICE] Lỗi khi gửi lại mã OTP:', error);
+      logger.error('[AUTH SERVICE] Lỗi khi gửi lại mã OTP: ' + (error instanceof Error ? error.message : String(error)));
       const errorMessage = error instanceof Error ? error.message : 'Có lỗi xảy ra khi xử lý yêu cầu gửi lại OTP';
       return { 
         success: false, 
@@ -356,7 +362,7 @@ class AuthService implements IAuthService {
       
       return { user, token };
     } catch (error) {
-      logger.error('Lỗi khi đăng nhập:', error);
+      logger.error('Lỗi khi đăng nhập: ' + (error instanceof Error ? error.message : String(error)));
       throw error;
     }
   }
@@ -384,7 +390,7 @@ class AuthService implements IAuthService {
         expiresIn: authConfig.jwt.expiresIn
       });
     } catch (error) {
-      logger.error('[AUTH SERVICE] Lỗi khi tạo token:', error);
+      logger.error('[AUTH SERVICE] Lỗi khi tạo token: ' + (error instanceof Error ? error.message : String(error)));
       throw new Error('Có lỗi xảy ra khi tạo token đăng nhập');
     }
   }
@@ -451,7 +457,7 @@ class AuthService implements IAuthService {
         refreshToken: newRefreshToken
       };
     } catch (error) {
-      logger.error('Lỗi khi làm mới token:', error);
+      logger.error('Lỗi khi làm mới token: ' + (error instanceof Error ? error.message : String(error)));
       return null;
     }
   }
@@ -472,13 +478,13 @@ class AuthService implements IAuthService {
       const user = await User.findOne({ where: { email } });
       
       if (!user) {
-        logger.warn(`Không tìm thấy người dùng với email: ${email}`);
+        logger.warn('Không tìm thấy người dùng với email: ' + email);
         return false;
       }
 
       // Kiểm tra xem email đã được xác thực chưa
       if (user.email_verified) {
-        logger.warn(`Email ${email} đã được xác thực trước đó`);
+        logger.warn('Email ' + email + ' đã được xác thực trước đó');
         return false;
       }
 
@@ -501,10 +507,10 @@ class AuthService implements IAuthService {
         verificationToken
       );
 
-      logger.info(`Đã gửi lại email xác thực đến ${email}`);
+      logger.info('Đã gửi lại email xác thực đến ' + email);
       return true;
     } catch (error) {
-      logger.error('Lỗi khi gửi lại email xác thực:', error);
+      logger.error('Lỗi khi gửi lại email xác thực: ' + (error instanceof Error ? error.message : String(error)));
       return false;
     }
   }
@@ -549,10 +555,10 @@ class AuthService implements IAuthService {
         updated_at: new Date()
       });
       
-      logger.info(`Đã đổi mật khẩu cho người dùng: ${user.email}`);
+      logger.info('Đã đổi mật khẩu cho người dùng: ' + user.email);
       return true;
     } catch (error) {
-      logger.error('Lỗi khi đổi mật khẩu:', error);
+      logger.error('Lỗi khi đổi mật khẩu: ' + (error instanceof Error ? error.message : String(error)));
       throw error;
     }
   }
@@ -576,7 +582,7 @@ class AuthService implements IAuthService {
 
       if (!user) {
         // Không thông báo lỗi cụ thể để tránh bị lộ thông tin
-        logger.warn(`Yêu cầu đặt lại mật khẩu cho email không tồn tại: ${email}`);
+        logger.warn('Yêu cầu đặt lại mật khẩu cho email không tồn tại: ' + email);
         return { 
           success: true, 
           message: 'Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi đến email của bạn' 
@@ -597,7 +603,7 @@ class AuthService implements IAuthService {
       // TODO: Gửi email đặt lại mật khẩu
       // await sendPasswordResetEmail(user.email, resetToken);
       
-      logger.info(`Yêu cầu đặt lại mật khẩu đã được gửi đến ${email}`);
+      logger.info('Yêu cầu đặt lại mật khẩu đã được gửi đến ' + email);
       
       return {
         success: true,
@@ -605,7 +611,7 @@ class AuthService implements IAuthService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Lỗi không xác định';
-      logger.error('Lỗi khi xử lý yêu cầu quên mật khẩu:', error);
+      logger.error('Lỗi khi xử lý yêu cầu quên mật khẩu: ' + (error instanceof Error ? error.message : String(error)));
       return {
         success: false,
         message: `Không thể xử lý yêu cầu quên mật khẩu. ${errorMessage}`
@@ -649,7 +655,7 @@ class AuthService implements IAuthService {
         updated_at: new Date()
       });
 
-      logger.info(`Đã đặt lại mật khẩu cho người dùng: ${user.email}`);
+      logger.info('Đã đặt lại mật khẩu cho người dùng: ' + user.email);
       
       return {
         success: true,
@@ -657,7 +663,7 @@ class AuthService implements IAuthService {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Lỗi không xác định';
-      logger.error('Lỗi khi đặt lại mật khẩu:', error);
+      logger.error('Lỗi khi đặt lại mật khẩu: ' + (error instanceof Error ? error.message : String(error)));
       return {
         success: false,
         message: `Không thể đặt lại mật khẩu. ${errorMessage}`

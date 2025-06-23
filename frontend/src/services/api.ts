@@ -11,11 +11,12 @@ export interface ApiError extends Error {
   serverError?: any;
 }
 
-// Lấy base URL từ biến môi trường, mặc định là http://localhost:3000/api
-const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+// Lấy base URL từ biến môi trường
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+// Tạo instance axios chung
 const api = axios.create({
-  baseURL: baseURL,
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -30,17 +31,8 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   (config) => {
-    // Thêm timestamp để tránh cache
-    if (config.params) {
-      config.params._t = Date.now();
-    } else {
-      config.params = { _t: Date.now() };
-    }
-
-    // Lấy token từ localStorage hoặc sessionStorage
+    // Thêm token vào header nếu có
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
-    // Nếu có token, thêm vào header
     if (token && !config.headers['Authorization']) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
@@ -255,50 +247,43 @@ api.interceptors.response.use(
   }
 );
 
+// Các hàm xác thực
+const login = async (credentials: { email: string; password: string }) => {
+  const response = await api.post('/auth/login', credentials);
+  return response.data;
+};
+
+const logout = async () => {
+  const response = await api.post('/auth/logout');
+  return response.data;
+};
+
+const getMe = async () => {
+  const response = await api.get('/auth/me');
+  return response.data;
+};
+
+const refreshToken = async () => {
+  const response = await api.post('/auth/refresh-token');
+  return response.data;
+};
+
 /**
  * API cho các chức năng xác thực người dùng
  * Bao gồm đăng nhập, đăng xuất, lấy thông tin người dùng, làm mới token
  */
-export const authApi = {
-  /**
-   * Đăng nhập người dùng
-   * @param credentials Thông tin đăng nhập (email và mật khẩu)
-   */
-  login: async (credentials: { email: string; password: string }) => {
-    const response = await api.post('/auth/login', credentials);
-    return response.data;
-  },
-
-  /**
-   * Đăng xuất người dùng
-   */
-  logout: async () => {
-    const response = await api.post('/auth/logout');
-    return response.data;
-  },
-
-  /**
-   * Lấy thông tin người dùng hiện tại
-   */
-  getMe: async () => {
-    const response = await api.get('/auth/me');
-    return response.data;
-  },
-
-  /**
-   * Làm mới access token bằng refresh token
-   */
-  refreshToken: async () => {
-    const response = await api.post('/auth/refresh-token');
-    return response.data;
-  },
+const authApi = {
+  login,
+  logout,
+  getMe,
+  refreshToken
 };
 
 /**
  * API cho các chức năng quản lý bài viết
  * Bao gồm lấy danh sách, tạo mới, cập nhật, xóa và xem chi tiết bài viết
  */
-export const postApi = {
+const postApi = {
   /**
    * Lấy danh sách bài viết
    * @param params Các tham số lọc và phân trang
@@ -452,7 +437,8 @@ export const postApi = {
  * API cho các chức năng quản lý danh mục
  * Bao gồm lấy danh sách, tạo mới, cập nhật, xóa và xem chi tiết danh mục
  */
-export const categoryApi = {
+// API cho các chức năng quản lý danh mục
+const categoryApi = {
   /**
    * Lấy danh sách tất cả danh mục
    * @param params Các tham số lọc và phân trang
@@ -500,4 +486,26 @@ export const categoryApi = {
   },
 };
 
-export default api;
+// Export các API
+export { categoryApi, postApi, authApi };
+
+// Tạo object chứa tất cả các API
+export default {
+  ...api,
+  get: api.get.bind(api),
+  post: api.post.bind(api),
+  put: api.put.bind(api),
+  delete: api.delete.bind(api),
+  categoryApi,
+  postApi,
+  auth: {
+    login,
+    logout,
+    getMe,
+    refreshToken
+  }
+};
+
+// Export các API riêng lẻ để sử dụng trực tiếp
+export { default as api } from './api';
+export * from './api';

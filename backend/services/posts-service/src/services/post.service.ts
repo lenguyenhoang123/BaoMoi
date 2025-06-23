@@ -32,7 +32,7 @@ class PostService {
       .trim();
   }
 
-  async createPost(data: CreatePostDto, authorId: string): Promise<Post> {
+  async createPost(data: CreatePostDto): Promise<Post> {
     const client = await db.getClient();
     try {
       await client.query('BEGIN', []);
@@ -42,15 +42,14 @@ class PostService {
       
       // Thêm bài viết mới
       const result = await client.query(
-        `INSERT INTO posts (title, slug, content, status, author_id, image_url, tags, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        `INSERT INTO posts (title, slug, content, status, image_url, tags, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
          RETURNING *`,
         [
           data.title,
           slug,
           data.content,
           data.status || 'draft',
-          authorId,
           data.image_url || null,
           data.tags ? JSON.stringify(data.tags) : null
         ]

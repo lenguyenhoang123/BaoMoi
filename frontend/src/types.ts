@@ -73,7 +73,6 @@ export interface Post {
   id: string;
   title: string;
   slug: string;
-  excerpt: string;
   content: string;
   featuredImage?: string;
   gallery?: string[];
@@ -99,7 +98,6 @@ export interface Post {
 export interface CreatePostData {
   title: string;
   slug?: string;
-  excerpt: string;
   content: string;
   featuredImage?: string;
   gallery?: string[];

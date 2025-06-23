@@ -1,9 +1,9 @@
 declare const logger: {
-    error: (message: string, error?: any) => void;
-    info: (message: string, data?: any) => void;
-    debug: (message: string, data?: any) => void;
-    warn: (message: string, data?: any) => void;
-    http: (message: string, meta?: any) => void;
+    error: (thongBao: string, loi?: any) => void;
+    info: (thongBao: string, duLieu?: any) => void;
+    debug: (thongBao: string, duLieu?: any) => void;
+    warn: (thongBao: string, duLieu?: any) => void;
+    http: (thongBao: string, meta?: any) => void;
 };
 export { logger };
 export default logger;

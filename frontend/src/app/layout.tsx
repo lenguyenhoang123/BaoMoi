@@ -6,6 +6,8 @@ import { ConfigProvider, Spin } from 'antd';
 import { antdTheme } from './antd.config';
 import { StyleProvider } from '@ant-design/cssinjs';
 import { MessageProvider } from '@/components/providers/MessageProvider';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import './globals.css';
 
 // Dynamic import for better performance
@@ -70,6 +72,18 @@ export default function RootLayout({
                   </main>
                   <Footer />
                 </div>
+                <ToastContainer
+                  position="top-right"
+                  autoClose={3000}
+                  hideProgressBar={false}
+                  newestOnTop
+                  closeOnClick
+                  rtl={false}
+                  pauseOnFocusLoss
+                  draggable
+                  pauseOnHover
+                  theme="light"
+                />
               </AuthProvider>
             </ConfigProvider>
           </MessageProvider>

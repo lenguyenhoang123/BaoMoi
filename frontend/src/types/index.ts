@@ -47,7 +47,6 @@ export interface Post {
   title: string;
   slug: string;
   summary?: string;
-  excerpt?: string;
   content: string;
   thumbnail?: string;
   image?: string;

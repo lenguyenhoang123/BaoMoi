@@ -2,17 +2,17 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Lấy đường dẫn thư mục hiện tại trong ES modules
+// Lấy đường dẫn thư mục hiện tại khi sử dụng ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Đường dẫn đến file .env của auth service
+// Đường dẫn đến file cấu hình .env của auth service
 const AUTH_ENV_PATH = path.join(__dirname, '../../.env');
 
-// Tải biến môi trường từ file .env của auth service
+// Nạp cấu hình từ file .env của auth service
 dotenv.config({ path: AUTH_ENV_PATH });
 
-// Kiểm tra các biến môi trường bắt buộc
+// Xác thực các biến môi trường bắt buộc
 const requiredVars = ['JWT_SECRET', 'JWT_EXPIRES_IN', 'REFRESH_TOKEN_SECRET', 'REFRESH_TOKEN_EXPIRES_IN'];
 const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
@@ -42,7 +42,7 @@ export const authConfig = {
   },
   security: {
     maxLoginAttempts: parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10),
-    lockoutTime: parseInt(process.env.LOCKOUT_TIME || '15', 10) * 60 * 1000, // 15 minutes
+    lockoutTime: parseInt(process.env.LOCKOUT_TIME || '15', 10) * 60 * 1000, // 15 phút
   },
 };
 
