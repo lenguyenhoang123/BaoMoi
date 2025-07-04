@@ -25,6 +25,7 @@
     
     /* Kiểm tra kiểu nghiêm ngặt */
     "strict": true,
+    "resolveJsonModule": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -38,7 +39,6 @@
     
     /* Tối ưu hóa */
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmitOnError": true,
     

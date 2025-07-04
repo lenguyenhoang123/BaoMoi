@@ -68,11 +68,12 @@ function generateSlug(title) {
         .replace(/--+/g, '-') // Thay nhiều dấu gạch ngang liên tiếp bằng một dấu
         .trim();
 }
-// Lấy danh sách bài viết
+// Lấy danh sách bài viết hoặc tags
 router.get(['/', '/posts', '/api', '/api/posts'], async (req, res) => {
     try {
-        console.log('GET /api/posts - Request received');
-        console.log('Query params:', req.query);
+        console.log('\n=== GET /api/posts ===');
+        console.log('Request received at:', new Date().toISOString());
+        console.log('Query params:', JSON.stringify(req.query, null, 2));
         // Lấy các tham số phân trang và sắp xếp
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
@@ -80,9 +81,55 @@ router.get(['/', '/posts', '/api', '/api/posts'], async (req, res) => {
         const sortBy = req.query.sortBy || 'created_at';
         const sortOrder = req.query.sortOrder === 'asc' ? 'ASC' : 'DESC';
         const searchTerm = req.query.search || '';
-        // Tạo câu truy vấn SQL
+        const categoryId = req.query.category_id;
+        console.log('Processed parameters:', {
+            page,
+            limit,
+            offset,
+            sortBy,
+            sortOrder,
+            searchTerm,
+            categoryId,
+            hasCategoryFilter: !!categoryId
+        });
+        // Kiểm tra nếu chỉ cần lấy danh sách tags
+        const fields = req.query.fields?.split(',').map(f => f.trim()) || [];
+        const onlyTags = fields.includes('tags') && fields.length === 1;
+        // Nếu chỉ lấy danh sách tags
+        if (onlyTags) {
+            try {
+                // Lấy tất cả các tags duy nhất từ cột tags
+                const result = await database_1.default.query(`SELECT DISTINCT unnest(tags) as tag 
+           FROM posts 
+           WHERE tags IS NOT NULL 
+           AND array_length(tags, 1) > 0
+           ORDER BY tag ASC`);
+                // Lọc và làm sạch dữ liệu tags
+                const tags = result.rows
+                    .map(row => row.tag)
+                    .filter((tag) => tag !== null &&
+                    tag !== undefined &&
+                    typeof tag === 'string' &&
+                    tag.trim() !== '');
+                // Trả về danh sách tags duy nhất
+                return res.status(200).json({
+                    success: true,
+                    data: [...new Set(tags)],
+                    message: 'Lấy danh sách tags thành công'
+                });
+            }
+            catch (error) {
+                console.error('Error fetching tags:', error);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Lỗi khi lấy danh sách tags',
+                    error: error instanceof Error ? error.message : 'Lỗi không xác định'
+                });
+            }
+        }
+        // Nếu không phải lấy tags, tiếp tục xử lý lấy danh sách bài viết
         let query = 'SELECT * FROM posts';
-        let countQuery = 'SELECT COUNT(*) FROM posts';
+        let countQuery = 'SELECT COUNT(*) as count FROM posts';
         const queryParams = [];
         const whereClauses = [];
         // Thêm điều kiện tìm kiếm nếu người dùng nhập từ khóa
@@ -90,27 +137,75 @@ router.get(['/', '/posts', '/api', '/api/posts'], async (req, res) => {
             whereClauses.push(`(title ILIKE $${queryParams.length + 1} OR content ILIKE $${queryParams.length + 1})`);
             queryParams.push(`%${searchTerm}%`);
         }
+        // Thêm điều kiện lọc theo category_id nếu có
+        if (req.query.category_id) {
+            const paramIndex = queryParams.length + 1;
+            whereClauses.push(`category_id = $${paramIndex}`);
+            queryParams.push(req.query.category_id);
+            console.log(`Added category filter: category_id = $${paramIndex} (${req.query.category_id})`);
+        }
         // Thêm mệnh đề WHERE nếu có điều kiện tìm kiếm
         if (whereClauses.length > 0) {
             const whereClause = ' WHERE ' + whereClauses.join(' AND ');
             query += whereClause;
             countQuery += whereClause;
+            console.log('Final WHERE clause:', whereClause);
         }
-        // Thêm điều kiện sắp xếp và phân trang vào câu truy vấn
+        else {
+            console.log('No WHERE conditions applied');
+        }
+        // Thêm điều kiện sắp xếp và phân trang
         query += ` ORDER BY ${sortBy} ${sortOrder} LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
         queryParams.push(limit, offset);
-        console.log('Executing query:', query, 'with params:', queryParams);
-        // Thực thi đồng thời cả 2 truy vấn: lấy dữ liệu và đếm tổng số bản ghi
-        const [postsResult, countResult] = await Promise.all([
-            database_1.default.query(query, queryParams),
-            database_1.default.query(countQuery, queryParams.slice(0, -2)) // Bỏ limit và offset cho count
-        ]);
-        const total = parseInt(countResult.rows[0].count);
+        console.log('\n=== SQL Query ===');
+        console.log('Main Query:', query);
+        console.log('Count Query:', countQuery);
+        console.log('Query Parameters:', JSON.stringify(queryParams, null, 2));
+        console.log('=================\n');
+        // Thực thi đồng thởi cả 2 truy vấn: lấy dữ liệu và đếm tổng số bản ghi
+        console.log('Executing database queries...');
+        const startTime = Date.now();
+        let postsResult, countResult;
+        try {
+            [postsResult, countResult] = await Promise.all([
+                database_1.default.query(query, queryParams),
+                database_1.default.query(countQuery, queryParams.slice(0, -2)) // Bỏ limit và offset cho count
+            ]);
+            console.log(`Queries executed in ${Date.now() - startTime}ms`);
+        }
+        catch (error) {
+            console.error('Database query error:', error);
+            throw error;
+        }
+        const total = parseInt(countResult.rows[0]?.count || '0');
         const totalPages = Math.ceil(total / limit);
-        res.status(200).json({
+        console.log('Query results:', {
+            postsCount: postsResult.rows.length,
+            totalItems: total,
+            totalPages,
+            hasResults: postsResult.rows.length > 0
+        });
+        if (postsResult.rows.length > 0) {
+            console.log('First post sample:', {
+                id: postsResult.rows[0].id,
+                title: postsResult.rows[0].title,
+                category_id: postsResult.rows[0].category_id,
+                is_published: postsResult.rows[0].is_published
+            });
+        }
+        // Xử lý dữ liệu bài viết
+        const posts = postsResult.rows.map(post => {
+            const processedPost = {
+                ...post,
+                tags: Array.isArray(post.tags) ? post.tags : []
+            };
+            return processedPost;
+        });
+        // Tạo kết quả trả về
+        const resultData = {
             success: true,
             data: {
-                items: postsResult.rows,
+                items: posts,
                 pagination: {
                     total,
                     totalPages,
@@ -120,7 +215,9 @@ router.get(['/', '/posts', '/api', '/api/posts'], async (req, res) => {
                 }
             },
             message: 'Lấy danh sách bài viết thành công'
-        });
+        };
+        console.log('Sending response with', posts.length, 'posts');
+        return res.status(200).json(resultData);
     }
     catch (error) {
         console.error('❌ Error getting posts:', error);
@@ -235,18 +332,8 @@ router.get(['/api/posts/:id', '/posts/:id', '/:id'], async (req, res) => {
             });
         }
         const post = result.rows[0];
-        // Lấy thông tin các thẻ (tags) nếu có
-        if (post.tags && post.tags.length > 0) {
-            try {
-                const tagsResult = await database_1.default.query('SELECT name FROM tags WHERE id = ANY($1::uuid[])', [post.tags]);
-                post.tags = tagsResult.rows.map(tag => tag.name);
-            }
-            catch (error) {
-                console.error('Error fetching tags:', error);
-                post.tags = [];
-            }
-        }
-        else {
+        // Đảm bảo tags luôn là mảng
+        if (!Array.isArray(post.tags)) {
             post.tags = [];
         }
         console.log(`✅ Found post with ID: ${id}`);

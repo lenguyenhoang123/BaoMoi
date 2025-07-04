@@ -3,7 +3,10 @@ import bodyParser from 'body-parser';
 import Post, { PostType } from '../models/post.model';
 import db from '../config/database';
 
-// Middleware xử lý lỗi kết nối cơ sở dữ liệu
+// Khởi tạo router trước khi sử dụng
+const router = Router();
+
+// Hàm xử lý lỗi cơ sở dữ liệu
 const handleDatabaseError = (error: Error, res: Response) => {
   console.error('❌ Lỗi cơ sở dữ liệu:', error);
   if (error.message.includes('ECONNREFUSED') || error.message.includes('ECONNRESET')) {
@@ -20,7 +23,90 @@ const handleDatabaseError = (error: Error, res: Response) => {
   });
 };
 
-const router = Router();
+// Hàm tạo slug từ tiêu đề
+const generateSlug = (title: string): string => {
+  return title
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '') // Xóa ký tự đặc biệt
+    .replace(/\s+/g, '-') // Thay dấu cách bằng dấu gạch ngang
+    .replace(/--+/g, '-') // Thay nhiều dấu gạch ngang liên tiếp bằng một dấu
+    .trim();
+};
+
+/**
+ * @swagger
+ * tags:
+ *   name: Posts
+ *   description: Quản lý bài viết
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Post:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *           description: ID của bài viết
+ *         title:
+ *           type: string
+ *           description: Tiêu đề bài viết
+ *         slug:
+ *           type: string
+ *           description: URL thân thiện của bài viết
+ *         summary:
+ *           type: string
+ *           description: Tóm tắt bài viết
+ *         content:
+ *           type: string
+ *           description: Nội dung bài viết
+ *         thumbnail:
+ *           type: string
+ *           description: URL ảnh đại diện
+ *         status:
+ *           type: string
+ *           enum: [draft, published, archived]
+ *           default: draft
+ *         published_at:
+ *           type: string
+ *           format: date-time
+ *           description: Thời gian xuất bản
+ *         created_at:
+ *           type: string
+ *           format: date-time
+ *         updated_at:
+ *           type: string
+ *           format: date-time
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         success:
+ *           type: boolean
+ *           example: false
+ *         error:
+ *           type: object
+ *           properties:
+ *             code:
+ *               type: string
+ *               example: 'VALIDATION_ERROR'
+ *             message:
+ *               type: string
+ *               example: 'Có lỗi xảy ra khi xác thực dữ liệu'
+ *             details:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   field:
+ *                     type: string
+ *                     example: 'title'
+ *                   message:
+ *                     type: string
+ *                     example: 'Tiêu đề không được để trống'
+ */
 
 // Cấu hình body parser để xử lý dữ liệu gửi lên
 const jsonParser = bodyParser.json({ limit: '10mb' });
@@ -62,17 +148,67 @@ router.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Hàm tạo slug từ tiêu đề
-function generateSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '') // Xóa ký tự đặc biệt
-    .replace(/\s+/g, '-') // Thay dấu cách bằng dấu gạch ngang
-    .replace(/--+/g, '-') // Thay nhiều dấu gạch ngang liên tiếp bằng một dấu
-    .trim();
-}
-
-// Lấy danh sách bài viết hoặc tags
+/**
+ * @swagger
+ * /api/posts:
+ *   get:
+ *     summary: Lấy danh sách bài viết
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Số trang
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Số lượng bài viết mỗi trang
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Từ khóa tìm kiếm
+ *       - in: query
+ *         name: category_id
+ *         schema:
+ *           type: string
+ *         description: Lọc theo danh mục
+ *     responses:
+ *       200:
+ *         description: Danh sách bài viết
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Post'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *       500:
+ *         description: Lỗi server
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get(['/', '/posts', '/api', '/api/posts'], async (req: Request, res: Response) => {
   try {
     console.log('\n=== GET /api/posts ===');
@@ -249,7 +385,44 @@ router.get(['/', '/posts', '/api', '/api/posts'], async (req: Request, res: Resp
   }
 });
 
-// Cập nhật bài viết
+/**
+ * @swagger
+ * /api/posts/{id}:
+ *   put:
+ *     summary: Cập nhật bài viết
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID bài viết
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Post'
+ *     responses:
+ *       200:
+ *         description: Bài viết đã được cập nhật
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Post'
+ *       400:
+ *         description: Dữ liệu không hợp lệ
+ *       404:
+ *         description: Không tìm thấy bài viết
+ *       500:
+ *         description: Lỗi server
+ */
 router.put(['/api/posts/:id', '/posts/:id', '/:id'], async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -351,6 +524,18 @@ router.get(['/api/posts/:id', '/posts/:id', '/:id'], async (req: Request, res: R
       });
     }
 
+    // Kiểm tra xem ID có phải là UUID hợp lệ không
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(id)) {
+      console.log(`❌ Invalid UUID format: ${id}`);
+      return res.status(400).json({
+        success: false,
+        message: 'ID bài viết không hợp lệ',
+        error: 'INVALID_POST_ID',
+        details: 'ID phải có định dạng UUID v4'
+      });
+    }
+
     // Thực hiện truy vấn cơ sở dữ liệu
     console.log(`\n🔍 Truy vấn bài viết với ID: ${id}`);
     const query = 'SELECT * FROM posts WHERE id = $1';
@@ -390,6 +575,35 @@ router.get(['/api/posts/:id', '/posts/:id', '/:id'], async (req: Request, res: R
 });
 
 // Create a new post
+/**
+ * @swagger
+ * /api/posts:
+ *   post:
+ *     summary: Tạo bài viết mới
+ *     tags: [Posts]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/Post'
+ *     responses:
+ *       201:
+ *         description: Bài viết đã được tạo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Post'
+ *       400:
+ *         description: Dữ liệu không hợp lệ
+ *       500:
+ *         description: Lỗi server
+ */
 router.post(['/', '/posts', '/api', '/api/posts'], async (req: Request, res: Response) => {
   console.log('\n=== POST REQUEST RECEIVED ===');
   console.log('Time:', new Date().toISOString());
@@ -640,6 +854,36 @@ router.patch(['/:id', '/posts/:id', '/api/posts/:id'], async (req: Request, res:
 });
 
 // DELETE /posts/:id hoặc /api/posts/:id - Xóa bài viết
+/**
+ * @swagger
+ * /api/posts/{id}:
+ *   delete:
+ *     summary: Xóa bài viết
+ *     tags: [Posts]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID bài viết
+ *     responses:
+ *       200:
+ *         description: Đã xóa bài viết thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Không tìm thấy bài viết
+ *       500:
+ *         description: Lỗi server
+ */
 router.delete(['/:id', '/posts/:id', '/api/posts/:id'], async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

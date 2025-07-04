@@ -6,9 +6,9 @@
     "auditLog": "D:\\Vietprodev\\BaoMoi\\backend\\services\\logs\\auth-service\\.71ca5729e7753f25c314c3331196e975df74efde-audit.json",
     "files": [
         {
-            "date": 1750044443735,
-            "name": "D:\\Vietprodev\\BaoMoi\\backend\\services\\logs\\auth-service\\combined-2025-06-16.log",
-            "hash": "3c20d23e03967dbb2b6fdd95796416d2977fc4fa1e2ca25bddfc1e1c9c6fd33a"
+            "date": 1751602031230,
+            "name": "D:\\Vietprodev\\BaoMoi\\backend\\services\\logs\\auth-service\\combined-2025-07-04.log",
+            "hash": "614e53d8afd6317ec4c9fbdbbf40a5e5190f8a49c9a42fbf90a9358cf5efb159"
         }
     ],
     "hashType": "sha256"

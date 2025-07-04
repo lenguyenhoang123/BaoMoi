@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cors, { CorsOptions } from 'cors';
 import path from 'path';
+import swaggerSpec from './docs/swagger';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -174,9 +175,16 @@ const allowedOrigins = [
 
 const corsOptions: CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Cho phép tất cả các origin trong môi trường phát triển
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // Trong môi trường production, chỉ cho phép các origin được chỉ định
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      console.warn(`Blocked by CORS: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -189,9 +197,18 @@ const corsOptions: CorsOptions = {
     'Accept',
     'Authorization',
     'X-Access-Token',
-    'X-Refresh-Token'
+    'X-Refresh-Token',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Methods'
   ],
-  exposedHeaders: ['X-Access-Token', 'X-Refresh-Token']
+  exposedHeaders: [
+    'X-Access-Token', 
+    'X-Refresh-Token',
+    'Content-Disposition',
+    'Access-Control-Allow-Origin'
+  ],
+  optionsSuccessStatus: 200 // Một số trình duyệt cần status 200 thay vì 204
 };
 
 // Áp dụng CORS trước tất cả các route khác
@@ -273,10 +290,196 @@ const notFoundHandler = (req: Request, res: Response) => {
       method: req.method,
       path: req.path,
       query: req.query
-    },
-    timestamp: new Date().toISOString()
+    }
   });
 };
+
+// Xử lý favicon.ico - đặt đầu tiên để tránh bị các route khác bắt nhầm
+app.get('/favicon.ico', (req, res) => {
+  console.log('Favicon.ico requested, returning 204');
+  res.status(204).end();
+  return; // Đảm bảo không có middleware nào khác xử lý tiếp
+});
+
+// Đặt các route API docs trước middleware static files
+// Serve Swagger UI HTML
+// Route cho Swagger UI
+app.get('/api-docs', (req, res) => {
+  console.log('Serving Swagger UI HTML');
+  
+  // Thiết lập CSP headers cho Swagger UI
+  const csp = [
+    `default-src 'self'`,
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com`,
+    `style-src 'self' 'unsafe-inline' https://unpkg.com`,
+    `img-src 'self' data: https: http:`,
+    `font-src 'self' https://unpkg.com data:`,
+    `connect-src 'self' http://localhost:3002`,  // Cho phép kết nối đến API server
+    `frame-ancestors 'self'`,
+    `form-action 'self'`,
+    `frame-src 'self' https://unpkg.com`,
+    `worker-src 'self' blob:`,
+    `object-src 'none'`
+  ].join('; ');
+  
+  res.setHeader('Content-Security-Policy', csp);
+  res.setHeader('X-Content-Security-Policy', csp);
+  res.setHeader('X-WebKit-CSP', csp);
+  
+  // Tạo HTML đơn giản không dùng template string
+  const html = [
+    '<!DOCTYPE html>',
+    '<html>',
+    '<head>',
+    '  <meta charset="UTF-8">',
+    '  <title>Posts Service API Documentation</title>',
+    '  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css" />',
+    '  <style>',
+    '    body { margin: 0; padding: 20px; }',
+    '    #swagger-ui { margin: 20px 0; }',
+    '    .swagger-ui .topbar { display: none !important; }',
+    '    .loading {',
+    '      font-family: Arial, sans-serif;',
+    '      padding: 20px;',
+    '      background: #f5f5f5;',
+    '      border-radius: 4px;',
+    '      margin: 20px 0;',
+    '    }',
+    '  </style>',
+    '</head>',
+    '<body>',
+    '  <h1>Posts Service API Documentation</h1>',
+    '  <div id="loading" class="loading">Loading API documentation...</div>',
+    '  <div id="swagger-ui"></div>',
+    '  ',
+    '  <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-bundle.js"></script>',
+    '  <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-standalone-preset.js"></script>',
+    '  <script>',
+    '    console.log(\'Initializing Swagger UI...\');',
+    '    ', 
+    '    // Show error message',
+    '    function showError(message) {',
+    '      const container = document.getElementById(\'swagger-ui\');',
+    '      if (!container) return;',
+    '      ', 
+    '      const errorDiv = document.createElement(\'div\');',
+    '      errorDiv.style.color = \'#721c24\';',
+    '      errorDiv.style.backgroundColor = \'#f8d7da\';',
+    '      errorDiv.style.border = \'1px solid #f5c6cb\';',
+    '      errorDiv.style.borderRadius = \'4px\';',
+    '      errorDiv.style.padding = \'15px\';',
+    '      errorDiv.style.margin = \'20px 0\';',
+    '      ', 
+    '      const h3 = document.createElement(\'h3\');',
+    '      h3.style.marginTop = \'0\';',
+    '      h3.style.color = \'inherit\';',
+    '      h3.textContent = \'Error loading API documentation\';',
+    '      ', 
+    '      const p1 = document.createElement(\'p\');',
+    '      p1.textContent = message;',
+    '      ', 
+    '      const p2 = document.createElement(\'p\');',
+    '      p2.textContent = \'Please check the browser console for more details.\';',
+    '      ', 
+    '      errorDiv.appendChild(h3);',
+    '      errorDiv.appendChild(p1);',
+    '      errorDiv.appendChild(p2);',
+    '      ', 
+    '      container.appendChild(errorDiv);',
+    '    }',
+    '    ', 
+    '    // Check if SwaggerUIBundle is available',
+    '    console.log(\'Checking SwaggerUIBundle availability...\');',
+    '    if (typeof SwaggerUIBundle === \'undefined\') {',
+    '      const errorMsg = \'Failed to load Swagger UI library. Please check your internet connection.\';',
+    '      console.error(errorMsg);',
+    '      showError(errorMsg);',
+    '      const loadingEl = document.getElementById(\'loading\');',
+    '      if (loadingEl) loadingEl.textContent = \'Error: Could not load Swagger UI\';',
+    '    } else {',
+    '      try {',
+    '        console.log(\'SwaggerUIBundle is available, initializing...\');',
+    '        ', 
+    '        // Show loading state',
+    '        const loadingEl = document.getElementById(\'loading\');',
+    '        if (loadingEl) {',
+    '          loadingEl.textContent = \'Đang tải tài liệu API...\';',
+    '        }',
+    '        ', 
+    '        // Log before initializing',
+    '        console.log(\'Fetching API docs from:\', \'http://localhost:3002/api-docs-json\');',
+    '        ', 
+    '        // Initialize Swagger UI',
+    '        window.ui = SwaggerUIBundle({',
+    '          url: \'http://localhost:3002/api-docs-json\',',
+    '          dom_id: \'#swagger-ui\',',
+    '          deepLinking: true,',
+    '          presets: [',
+    '            SwaggerUIBundle.presets.apis,',
+    '            SwaggerUIStandalonePreset',
+    '          ],',
+    '          requestInterceptor: function(request) {',
+    '            // Đảm bảo tất cả các request API đều đi qua cổng 3002',
+    '            if (request.url && request.url.startsWith(\'/api/\')) {',
+    '              request.url = \'http://localhost:3002\' + request.url;',
+    '            }',
+    '            return request;',
+    '          },',
+    '          layout: "StandaloneLayout",',
+    '          onComplete: function() {',
+    '            console.log(\'✅ Swagger UI loaded successfully\');',
+    '            if (loadingEl) loadingEl.style.display = \'none\';',
+    '          },',
+    '          onFailure: function(error) {',
+    '            const errorMsg = \'Failed to load API documentation: \' + (error && error.message ? error.message : \'Unknown error\');',
+    '            console.error(\'❌ Swagger UI error:\', error);',
+    '            showError(errorMsg);',
+    '            if (loadingEl) loadingEl.textContent = \'Lỗi: Không thể tải tài liệu API\';',
+    '          }',
+    '        });',
+    '        ', 
+    '        // Add fetch error handler',
+    '        fetch(\'http://localhost:3002/api-docs-json\')',
+    '          .then(response => {',
+    '            if (!response.ok) {',
+    '              throw new Error(`HTTP error! status: ${response.status}`);',
+    '            }',
+    '            return response.json();',
+    '          })',
+    '          .then(json => console.log(\'✅ API docs JSON loaded successfully\', json))',
+    '          .catch(error => {',
+    '            console.error(\'❌ Failed to fetch API docs JSON:\', error);',
+    '            showError(`Không thể tải tài liệu API: ${error.message}`);',
+    '            if (loadingEl) loadingEl.textContent = \'Lỗi: Không thể tải tài liệu API\';',
+    '          });',
+    '        ', 
+    '        // Handle resource loading errors',
+    '        window.addEventListener(\'error\', function(e) {',
+    '          console.error(\'❌ Error loading resource:\', e);',
+    '          if (loadingEl) loadingEl.textContent += \'\\nLỗi tải tài nguyên: \' + (e.message || \'Unknown error\');',
+    '        }, true);',
+    '        ', 
+    '      } catch (error) {',
+    '        console.error(\'Error initializing Swagger UI:\', error);',
+    '        showError(\'Error initializing API documentation: \' + (error && error.message ? error.message : \'Unknown error\'));',
+    '      }',
+    '    }',
+    '  </script>',
+    '</body>',
+    '</html>'
+  ].join('\n');
+  
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
+});
+
+// Serve Swagger JSON
+app.get('/api-docs-json', (req: Request, res: Response) => {
+  res.json(swaggerSpec);
+});
+
+// Phục vụ file tĩnh từ thư mục public (đặt sau các route API docs)
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Áp dụng các middleware chung
 app.use(corsHeaders);

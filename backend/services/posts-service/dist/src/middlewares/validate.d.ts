@@ -45,7 +45,7 @@ declare const _default: {
     validateQuery: <T_1 extends Joi.ObjectSchema<any>>(schema: T_1) => (req: Request<import("express-serve-static-core").ParamsDictionary, any, any, import("qs").ParsedQs, Record<string, any>>, _res: Response<any, Record<string, any>>, next: NextFunction) => void;
     validateParams: <T_2 extends Joi.ObjectSchema<any>>(schema: T_2) => (req: Request<import("express-serve-static-core").ParamsDictionary, any, any, import("qs").ParsedQs, Record<string, any>>, _res: Response<any, Record<string, any>>, next: NextFunction) => void;
     validateFiles: (fields: Record<string, {
-        required?: boolean | undefined;
+        required?: boolean;
     }>, maxFileSize?: number, allowedMimeTypes?: string[]) => (req: Request<import("express-serve-static-core").ParamsDictionary, any, any, import("qs").ParsedQs, Record<string, any>>, _res: Response<any, Record<string, any>>, next: NextFunction) => void;
 };
 export default _default;

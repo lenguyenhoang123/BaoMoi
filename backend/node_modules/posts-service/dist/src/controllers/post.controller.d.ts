@@ -1,3 +1,4 @@
+/// <reference types="express" />
 import BaseController from './base.controller';
 export default class PostController extends BaseController {
     private postService;

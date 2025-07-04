@@ -7,7 +7,7 @@
     "outDir": "./dist",
     "rootDir": ".",
     "composite": true,
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -19,7 +19,7 @@
       "./node_modules/@types",
       "./src/types"
     ],
-    "types": ["node"],
+    "types": ["node", "express"],
     "allowSyntheticDefaultImports": true,
     "declaration": true,
     "declarationMap": true,
@@ -27,13 +27,16 @@
     "preserveSymlinks": true,
     "incremental": true,
     "allowJs": true,
-    "checkJs": false
+    "checkJs": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.js",
-    "src/**/*.jsx"
+    "src/**/*.jsx",
+    "package.json"
   ],
   "exclude": [
     "node_modules",
@@ -41,8 +44,5 @@
     "**/*.test.ts",
     "**/*.spec.ts",
     "**/*.d.ts"
-  ],
-  "references": [
-
   ]
 }

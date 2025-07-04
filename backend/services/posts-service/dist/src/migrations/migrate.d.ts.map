@@ -1,1 +1,1 @@
-{"version":3,"file":"migrate.d.ts","sourceRoot":"","sources":["../../../src/migrations/migrate.ts"],"names":[],"mappings":"AACA,QAAA,MAAQ,IAAI,KAAkB,CAAC;AAC/B,QAAA,MAAM,IAAI,KAAkB,CAAC;AAG7B,QAAA,MAAM,QAAQ;;;;;;CAMb,CAAC;AAQF,QAAA,MAAM,IAAI,KAAqB,CAAC;AAGhC,iBAAe,YAAY,kBA+G1B"}
+{"version":3,"file":"migrate.d.ts","sourceRoot":"","sources":["../../../src/migrations/migrate.ts"],"names":[],"mappings":""}

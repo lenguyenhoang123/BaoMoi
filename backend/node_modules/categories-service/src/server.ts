@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import express, { Request, Response, NextFunction } from 'express';
 import morgan from 'morgan';
 import cors, { CorsOptions } from 'cors';
+// Swagger UI is loaded via CDN in the HTML
 
 // Import các route
 import categoryRoutes from './routes/category.routes';
@@ -12,6 +13,7 @@ import { sequelize } from './config/sequelize';
 import { QueryTypes } from 'sequelize';
 import { errorHandler, notFoundHandler } from './middlewares/error.handler';
 import { logger } from './utils/logger';
+import swaggerSpec from './docs/swagger';
 
 // Lấy đường dẫn thư mục hiện tại (tương thích với ES module)
 const __filename = fileURLToPath(import.meta.url);
@@ -229,7 +231,57 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // API routes
-app.use('', categoryRoutes);
+app.use('/api/categories', categoryRoutes);
+
+// Swagger UI
+// Simple Swagger UI setup
+app.get('/api-docs', (_req, res) => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Categories Service API</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css">
+      <style>
+        .swagger-ui .topbar { display: none; }
+        .swagger-ui .info { margin: 20px 0; }
+        .swagger-ui .info .title small { background: #1b69a4 !important; }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-bundle.js"></script>
+      <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-standalone-preset.js"></script>
+      <script>
+        window.onload = function() {
+          window.ui = SwaggerUIBundle({
+            url: '/api-docs-json',
+            dom_id: '#swagger-ui',
+            presets: [
+              SwaggerUIBundle.presets.apis,
+              SwaggerUIStandalonePreset
+            ],
+            layout: "StandaloneLayout",
+            deepLinking: true,
+            filter: true,
+            docExpansion: 'list',
+            displayRequestDuration: true
+          });
+        };
+      </script>
+    </body>
+    </html>
+  `;
+  res.send(html);
+});
+
+// API docs JSON
+app.get('/api-docs-json', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // Test route
 app.get('/test', (_req: Request, res: Response) => {

@@ -157,10 +157,16 @@ const allowedOrigins = [
 ];
 const corsOptions = {
     origin: (origin, callback) => {
+        // Cho phép tất cả các origin trong môi trường phát triển
+        if (process.env.NODE_ENV === 'development') {
+            return callback(null, true);
+        }
+        // Trong môi trường production, chỉ cho phép các origin được chỉ định
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         }
         else {
+            console.warn(`Blocked by CORS: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -173,9 +179,18 @@ const corsOptions = {
         'Accept',
         'Authorization',
         'X-Access-Token',
-        'X-Refresh-Token'
+        'X-Refresh-Token',
+        'Access-Control-Allow-Origin',
+        'Access-Control-Allow-Headers',
+        'Access-Control-Allow-Methods'
     ],
-    exposedHeaders: ['X-Access-Token', 'X-Refresh-Token']
+    exposedHeaders: [
+        'X-Access-Token',
+        'X-Refresh-Token',
+        'Content-Disposition',
+        'Access-Control-Allow-Origin'
+    ],
+    optionsSuccessStatus: 200 // Một số trình duyệt cần status 200 thay vì 204
 };
 // Áp dụng CORS trước tất cả các route khác
 app.use((0, cors_1.default)(corsOptions));
@@ -249,10 +264,35 @@ const notFoundHandler = (req, res) => {
             method: req.method,
             path: req.path,
             query: req.query
-        },
-        timestamp: new Date().toISOString()
+        }
     });
 };
+// Phục vụ file tĩnh từ thư mục public
+app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
+// Route cho Swagger UI
+app.get('/api-docs', (req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../public/swagger.html'));
+});
+// Route cho OpenAPI spec (nếu cần)
+app.get('/api-docs-json', (req, res) => {
+    res.json({
+        openapi: '3.0.0',
+        info: {
+            title: 'Posts Service API',
+            version: '1.0.0',
+            description: 'API documentation for the Posts Service',
+        },
+        servers: [
+            {
+                url: 'http://localhost:3004',
+                description: 'Development server',
+            },
+        ],
+        paths: {
+        // Các endpoint sẽ được tự động thêm bởi swagger-jsdoc
+        }
+    });
+});
 // Áp dụng các middleware chung
 app.use(corsHeaders);
 app.use(requestLogger);

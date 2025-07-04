@@ -1,36 +1,56 @@
 import express, { Request, Response, NextFunction, Application } from 'express';
-import cors from 'cors';
+import { createServer, Server as HttpServer } from 'http';
 import dotenv from 'dotenv';
 import path from 'path';
-import { createServer } from 'http';
-import { fileURLToPath } from 'url';
 import morgan from 'morgan';
-import db, { sequelize } from './config/database';
-import { authRoutes } from './routes/auth.routes';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './docs/swagger';
+import { sequelize } from './config/database';
+import authRouter from './routes/auth.routes';
 import { errorHandler } from './middlewares/error.middleware';
-import logger, { stream } from './config/logger';
+import logger from './utils/logger';
+import { UserRole } from './models/user.types';
+import { fileURLToPath } from 'url';
+
+// Tạo __dirname cho ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Create a stream for morgan
+const stream = {
+  write: (message: string) => {
+    logger.http(message.trim());
+  },
+};
+import cors from 'cors';
+
+interface IUser {
+  id: string;
+  email: string;
+  role: UserRole;
+}
 
 declare global {
-  namespace NodeJS {
-    interface ProcessEnv {
-      NODE_ENV: 'development' | 'production' | 'test';
-      PORT: string;
-      DB_NAME: string;
-      DB_USER: string;
-      DB_PASS: string;
-      DB_HOST: string;
-      DB_PORT: string;
-      JWT_SECRET: string;
-      JWT_EXPIRES_IN: string;
-      REFRESH_TOKEN_SECRET: string;
-      REFRESH_TOKEN_EXPIRES_IN: string;
+  namespace Express {
+    interface Request {
+      user?: IUser;
+      originalUrl: string;
+      ip: string;
+      get(name: string): string | undefined;
     }
   }
 }
 
+declare module 'express-serve-static-core' {
+  interface Response {
+    on(event: string, listener: (...args: any[]) => void): this;
+    statusCode: number;
+    statusMessage: string;
+    get(name: string): string | undefined;
+  }
+}
+
 // Cấu hình đường dẫn đến file .env
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const SERVICE_ENV_PATH = path.join(__dirname, '../../.env');
 dotenv.config({ path: SERVICE_ENV_PATH });
 
@@ -49,6 +69,7 @@ const requiredEnvVars = [
 ];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 if (missingVars.length > 0) {
+  logger.error(`Missing required environment variables: ${missingVars.join(', ')}`);
   process.exit(1);
 }
 
@@ -67,9 +88,16 @@ const allowedOrigins = [
 // Cấu hình tùy chọn CORS
 const corsOptions: cors.CorsOptions = {
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Cho phép tất cả các origin trong môi trường phát triển
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // Trong môi trường production, chỉ cho phép các origin được chỉ định
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
+      logger.warn(`Blocked by CORS: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -82,23 +110,68 @@ const corsOptions: cors.CorsOptions = {
     'Accept',
     'Authorization',
     'X-Access-Token',
-    'X-Refresh-Token'
+    'X-Refresh-Token',
+    'Access-Control-Allow-Origin'
   ],
-  exposedHeaders: ['X-Access-Token', 'X-Refresh-Token']
+  exposedHeaders: ['X-Access-Token', 'X-Refresh-Token'],
+  optionsSuccessStatus: 200 // Một số trình duyệt cần status 200 thay vì 204
 };
 
 // Khởi tạo ứng dụng Express
 const app: Application = express();
 
 // Middleware cơ bản
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Swagger Documentation
+app.get('/api-docs', (req: Request, res: Response) => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Auth Service API Documentation</title>
+        <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui.css" />
+        <style>
+          .swagger-ui .topbar { display: none }
+        </style>
+      </head>
+      <body>
+        <div id="swagger-ui"></div>
+        <script src="https://unpkg.com/swagger-ui-dist@4.5.0/swagger-ui-bundle.js"></script>
+        <script>
+          window.onload = () => {
+            window.ui = SwaggerUIBundle({
+              url: '/api-docs-json',
+              dom_id: '#swagger-ui',
+              presets: [
+                SwaggerUIBundle.presets.apis,
+                SwaggerUIBundle.SwaggerUIStandalonePreset
+              ],
+              layout: "BaseLayout",
+              deepLinking: true,
+              showExtensions: true,
+              showCommonExtensions: true
+            });
+          };
+        </script>
+      </body>
+    </html>
+  `;
+  res.send(html);
+});
+
+// Serve Swagger JSON
+app.get('/api-docs-json', (req: Request, res: Response) => {
+  res.json(swaggerSpec);
+});
 
 // Logging HTTP requests
 app.use(morgan('combined', { stream }));
 
 // Log các request đến
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   logger.info(`[${req.method}] ${req.originalUrl}`, {
     body: req.body,
     query: req.query,
@@ -118,7 +191,7 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 // Đăng ký các route xác thực
-app.use('/auth', authRoutes);
+app.use('/auth', authRouter);
 
 // Xử lý lỗi 404 - Không tìm thấy đường dẫn
 app.use((req: Request, res: Response) => {
@@ -189,19 +262,19 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Khởi tạo HTTP server
-const server = createServer(app);
+// Cấu hình cổng mặc định cho auth-service
+const DEFAULT_PORT = 3005;
+const PORT: number = parseInt(process.env.PORT || DEFAULT_PORT.toString(), 10);
+const server: HttpServer = createServer(app);
 
 // Khởi động máy chủ
 async function khoiDongMayChu(): Promise<void> {
   try {
     console.log('🔄 Đang kiểm tra kết nối database...');
     // Kiểm tra kết nối database
-    await db.query('SELECT 1');
+    await sequelize.authenticate();
+    await sequelize.sync();
     console.log('✅ Kết nối database thành công');
-    
-    // Lấy cổng từ biến môi trường hoặc sử dụng cổng mặc định
-    const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
     
     // Lắng nghe kết nối
     server.listen(PORT, '0.0.0.0', () => {
